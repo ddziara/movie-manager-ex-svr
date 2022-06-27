@@ -4,6 +4,8 @@ import express from "express";
 import http from "http";
 import type { IExecutableSchemaDefinition } from "@graphql-tools/schema";
 import { typeDefs, resolvers } from "./graphql/defs";
+import { MoviesDataSource } from "./datasources/movies-data-source";
+import { AppPlatformType } from "./common/types";
 
 async function startApolloServer(
   typeDefs: IExecutableSchemaDefinition["typeDefs"],
@@ -11,6 +13,10 @@ async function startApolloServer(
 ) {
   const app = express();
   const httpServer = http.createServer(app);
+
+  const APP_PLATFORM = process.env["APP_PLATFORM"] as AppPlatformType;
+  // const dbSource = new MoviesDataSource(APP_PLATFORM);
+
   const server = new ApolloServer({
     typeDefs,
     resolvers,
