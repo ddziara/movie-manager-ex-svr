@@ -1,0 +1,23 @@
+import type { types } from 'pg';
+import { dateToUTCString } from './utils';
+
+export const setupPostgresParsers = (): void => {
+    const tps: typeof types = require('pg').types;
+
+    //  timestamp
+    tps.setTypeParser(1114, function (val) {
+        const dt = new Date(val + "+0000");
+        const d_str = dateToUTCString(dt);
+        return d_str.substr(0, d_str.length - 3);
+    });
+
+    //  int8
+    tps.setTypeParser(20, function (val) {
+        return parseInt(val);
+    });
+
+    //  bool
+    tps.setTypeParser(16, function (val) {
+        return (val === "t") ? 1 : 0;
+    });
+}
