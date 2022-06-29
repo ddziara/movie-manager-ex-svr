@@ -4,7 +4,7 @@ import { typeDefs, resolvers } from "../graphql/defs";
 
 // dummy data
 
-const playItemInfo: IPlayItemInfo[] = [
+/*const playItemInfo: IPlayItemInfo[] = [
     {
       id: 1,
       type: 0,
@@ -57,22 +57,23 @@ const playItemInfo: IPlayItemInfo[] = [
       custom: "",
     },
   ];  
+*/  
 
 describe("Testing GraphQL querries, mutations ans subscriptions", () => {
   test("", () => {
-    // create a test server to test against, using our production typeDefs,
-    // resolvers, and dataSources.
-    const server = new ApolloServer({
-      typeDefs,
-      resolvers,
-    });
-
-    // const result = await testServer.executeOperation({
-    //   query: "query SayHelloWorld($name: String) { hello(name: $name) }",
-    //   variables: { name: "world" },
+    // // create a test server to test against, using our production typeDefs,
+    // // resolvers, and dataSources.
+    // const server = new ApolloServer({
+    //   typeDefs,
+    //   resolvers,
     // });
 
-    // expect(result.errors).toBeUndefined();
-    // expect(result.data?.hello).toBe("Hello world!");
+    // // const result = await testServer.executeOperation({
+    // //   query: "query SayHelloWorld($name: String) { hello(name: $name) }",
+    // //   variables: { name: "world" },
+    // // });
+
+    // // expect(result.errors).toBeUndefined();
+    // // expect(result.data?.hello).toBe("Hello world!");
   });
 });

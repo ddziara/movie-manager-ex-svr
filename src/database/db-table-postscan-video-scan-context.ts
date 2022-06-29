@@ -14,7 +14,7 @@ export class DBTablePostscan_Video_Scan_Context extends DBTable {
     getSQLCreateText(useTableSchema = true, useIndexSchema = true, useIndexTableSchema = false): string[] {
         const aSqlText: string[] = [];
 
-        if (this.appPlatform === 'postgress') {
+        if (this.appPlatform === 'postgres') {
             const sqlText = `CREATE TABLE IF NOT EXISTS ${useTableSchema ? this.getExtendedName() : this.name}` +
                 `(` +
                 `folder text,` +

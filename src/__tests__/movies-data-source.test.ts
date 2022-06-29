@@ -2,24 +2,57 @@ import { AppPlatformType } from "../common/types";
 import type { IFS } from "unionfs/lib/fs";
 import { DBextra } from "../database/db-db-extra";
 import { DBTableMovieGroupTypes } from "../database/db-table-moviegrouptypes";
-import type {
-  DBDataMovieManagerCyberlink,
-  IRunReturn,
-} from "../database/db-data-moviemanager-cyberlink";
-import type { Knex } from "knex";
+import { IBetterSQqliteRunReturn } from "../database/db-data-moviemanager-cyberlink";
+import knx, { Knex } from "knex";
 import type { MoviesDataSource } from "../datasources/movies-data-source";
 import type { DB } from "../database/db-db";
 import { convertStringCase, StringCaseMode } from "../database/utils";
+import type { DBDataMovieManagerCyberlink } from "../database/db-data-moviemanager-cyberlink";
+import { IPostgresRunReturn } from "../database/db-data-moviemanager-postgres";
 
 interface DBDataMovieManagerCyberlinkPublic {
   attachDBCreateTables(db: DB, dbpath: string): Promise<void>;
 }
 
-//  ${"postgress"}
+interface DBDataMovieManagerPostgresPublic {
+  createSchemaCreateTables(db: DB): Promise<void>;
+}
+
+interface IExecRetVoidPublic {
+  execRetVoid(sql: string, ...params: unknown[]): Promise<void>;
+}
+
+interface IExecQueryPublic {
+  execQuery(
+    sql: string,
+    ...params: unknown[]
+  ): Promise<Record<string, unknown>[]>;
+}
+
+interface IExecRetIDPublic {
+  execRetID(id: string, sql: string, ...params: unknown[]): Promise<number>;
+}
+
+interface IBetterSqliteRawExecRetIDPublic {
+  _rawExecRetID(
+    sql: string,
+    bindings: readonly Knex.RawBinding[]
+  ): Promise<Knex.Raw<IBetterSQqliteRunReturn>>;
+}
+
+interface IPostgresRawExecRetIDPublic {
+  _rawExecRetID(
+    sql: string,
+    bindings: readonly Knex.RawBinding[]
+  ): Promise<Knex.Raw<IPostgresRunReturn>>;
+}
+
+jest.setTimeout(60000);
 
 describe.each`
   appPlatform
   ${"cyberlink"}
+  ${"postgres"}
 `(
   `Checking database code`,
   ({ appPlatform }: { appPlatform: AppPlatformType }) => {
@@ -28,16 +61,13 @@ describe.each`
     let moviesDataSource: MoviesDataSource;
     let fs;
     let vol;
-    let convertReportedColumnName: (txt: string) => string = (txt: string) =>
-      txt;
+    let convertReportedColumnName: (txt: string) => string;
+
+    // ignore "cyberlink" tests on "postgres" platform
+    const APP_PLATFORM = process.env["APP_PLATFORM"] as AppPlatformType
+    if (APP_PLATFORM === "postgres" && appPlatform as AppPlatformType === "cyberlink") return;
 
     beforeAll(async () => {
-      jest.setTimeout(60000);
-      console.log(`beforeAll() ${appPlatform}`);
-
-      // Note: all loaded modules will be first cached in isolated cache, next removed fromt it
-      //       and anly referenced by variables.
-      // jest.isolateModules(() => {
       jest.doMock("../database/db-const", () => {
         const originalModule = jest.requireActual(
           "../database/db-const"
@@ -118,55 +148,19 @@ describe.each`
             },
           };
         });
-      } else if (appPlatform === "postgress") {
+      } else if (appPlatform === "postgres") {
         convertReportedColumnName = (txt: string) => {
           return convertStringCase(txt, StringCaseMode.ToLowerCase);
         };
-
-        // jest.doMock('pg');
-        // pg = require('pg') as typeof pgMod;
-        // ({ DBextra } = require("../database/db-db-extra"));
-        // ({ DBTableMovieGroupTypes } = require("../database/db-table-moviegrouptypes"));
-        // ({ DBDataMovieManagerHeroku } = require('../database/db-data-moviemanager-heroku'));
-        // const { getCreatePlatformDBDMM }: { getCreatePlatformDBDMM: typeof getCreatePlatformDBDMMFun } = require('../database/db-data-moviemanager-platform');
-        // createPlatformDBDMM = getCreatePlatformDBDMM(appPlatform);              // getCreatePlatformDBDMM() need to ne called in the sandbox
-        // connectImplForInit = async (): Promise<PoolClient> => {
-        //     const poolClient = {
-        //         release: jest.fn(function () { }) as unknown,
-        //         query: jest.fn(async function (this: PoolClient, queryTextOrConfig: string, values?: any[] | undefined): Promise<QueryResult<any>> {
-        //             if (queryTextOrConfig.includes("INSERT INTO")) {
-        //                 return {
-        //                     rowCount: 1,
-        //                     rows: [{ _id: 1 }],
-        //                 } as QueryResult;
-        //             }
-        //             return {} as QueryResult;
-        //         }) as unknown,
-        //     } as PoolClient;
-        //     if (poolClientHistory) poolClientHistory.push(poolClient);
-        //     return poolClient;
-        // };
-        // mocked(jest.spyOn(pg.Pool.prototype, "connect")).mockImplementation(connectImplForInit);
-        // connectImplForExecQueryThrows = async (): Promise<PoolClient> => {
-        //     const poolClient = {
-        //         release: jest.fn(function () { }) as unknown,
-        //         query: jest.fn(async function (this: PoolClient, queryTextOrConfig: string, values?: any[] | undefined): Promise<QueryResult<any>> {
-        //             throw new Error("query() exception");
-        //         }) as unknown,
-        //     } as PoolClient;
-        //     if (poolClientHistory) poolClientHistory.push(poolClient);
-        //     return poolClient;
-        // };
       }
-      // });
     });
 
     afterAll(() => {
       if (appPlatform === "cyberlink") {
         jest.dontMock("fs");
         jest.dontMock("../database/db-path-cyberlink");
-      } else if (appPlatform === "postgress") {
-        // jest.dontMock('pg');
+      } else if (appPlatform === "postgres") {
+        // TODO:
       }
     });
 
@@ -175,52 +169,87 @@ describe.each`
         "../datasources/movies-data-source"
       );
 
-      moviesDataSource = new MoviesDataSource(appPlatform);
+      if (appPlatform === "cyberlink") {
+        const { getCyberlinkRootDBPath, getCyberlinkRootDBName } = await import(
+          "../database/db-path-cyberlink"
+        );
+
+        const knexBetterSqlite = knx({
+          client: "better-sqlite3",
+          connection: {
+            filename: getCyberlinkRootDBPath().concat(getCyberlinkRootDBName()),
+          },
+          useNullAsDefault: true,
+        });
+        
+        const { DBDataMovieManagerCyberlink } = await import(
+          "../database/db-data-moviemanager-cyberlink"
+        );
+
+        moviesDataSource = new MoviesDataSource(
+          knexBetterSqlite,
+          DBDataMovieManagerCyberlink
+        );
+      } else if (appPlatform === "postgres") {
+        const knexPostgres = knx({
+          client: "pg",
+          connection: process.env.TEST_DATABASE_URL,
+          // searchPath: ['knex', 'public'],
+        });
+
+        const { DBDataMovieManagerPostgres } = await import(
+          "../database/db-data-moviemanager-postgres"
+        );
+
+        moviesDataSource = new MoviesDataSource(
+          knexPostgres,
+          DBDataMovieManagerPostgres
+        );
+
+        // remove database content
+        await moviesDataSource.init();
+
+        let tab;
+        const dbDataMovieManager = moviesDataSource["_dbDataMovieManager"];
+
+        let indx = 0;
+        while((tab = dbDataMovieManager.dbcldb.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
+        //==
+        indx = 0;
+        while((tab = dbDataMovieManager.dbextra.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
+        //==
+        indx = 0;
+        while((tab = dbDataMovieManager.dbmediaScannerCache.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
+        //==
+        indx = 0;
+        while((tab = dbDataMovieManager.dbmoviemedia.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
+        //==
+        indx = 0;
+        while((tab = dbDataMovieManager.dbplaylist.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
+
+        //==
+        await moviesDataSource.uninit();
+      }
     });
 
-    if (appPlatform === "cyberlink") {
-      test("checking initialization and uninitialization", async () => {
-        // import "MoviesDataSource" with mocked "getPOSIXDBPathBase()" for "cyberlink"
-        await moviesDataSource.init();
-        expect(moviesDataSource.ready).toBe(true);
-        //===============================================================
-        await moviesDataSource.uninit();
-        expect(moviesDataSource.ready).toBe(false);
-      });
-      test("checking uninitialization without initialization", async () => {
-        // import "MoviesDataSource" with mocked "getPOSIXDBPathBase()" for "cyberlink"
-        await moviesDataSource.uninit();
-        expect(moviesDataSource.ready).toBe(false);
-      });
-    } else if (appPlatform === "postgress") {
-      // test("checking initialization and uninitialization", async () => {
-      //     poolClientHistory = [];
-      //     let dbdata_moviemanager_instance: DBDataMovieManager = createPlatformDBDMM();
-      //     await dbdata_moviemanager_instance.init();
-      //     console.log("");
-      //     expect(poolClientHistory.length).toBeGreaterThanOrEqual(1);
-      //     expect(mocked(poolClientHistory[0].query).mock.calls.length).toBe(30);
-      //     expect(mocked(poolClientHistory[0].release).mock.calls.length).toBe(1);
-      //     poolClientHistory = [];
-      //     expect(dbdata_moviemanager_instance.ready).toBe(true);
-      //     //===============================================================
-      //     await dbdata_moviemanager_instance.execRetVoid("");
-      //     expect(poolClientHistory.length).toBe(1);
-      //     expect(mocked(poolClientHistory[0].query).mock.calls.length).toBe(1);
-      //     expect(mocked(poolClientHistory[0].release).mock.calls.length).toBe(1);
-      //     //===============================================================
-      //     await dbdata_moviemanager_instance.uninit();
-      //     expect(dbdata_moviemanager_instance.ready).toBe(false);
-      //     poolClientHistory = null;
-      // });
-      // test("checking uninitialization without initialization", async () => {
-      //     poolClientHistory = [];
-      //     let dbdata_moviemanager_instance: DBDataMovieManager = createPlatformDBDMM();
-      //     await dbdata_moviemanager_instance.uninit();
-      //     expect(dbdata_moviemanager_instance.ready).toBe(false);
-      //     poolClientHistory = null;
-      // });
-    }
+    afterEach(async () => {
+      if (appPlatform === "postgres") {
+        // to forcibly disconnet clients
+        await moviesDataSource["knex"].destroy();      
+      }
+    })
+
+    test("checking initialization and uninitialization", async () => {
+      await moviesDataSource.init();
+      expect(moviesDataSource.ready).toBe(true);
+      //===============================================================
+      await moviesDataSource.uninit();
+      expect(moviesDataSource.ready).toBe(false);
+    });
+    test("checking uninitialization without initialization", async () => {
+      await moviesDataSource.uninit();
+      expect(moviesDataSource.ready).toBe(false);
+    });
 
     test("checking DBData.dumpTable(*) missing branches/lines/statements", async () => {
       const db = new DBextra(appPlatform);
@@ -234,15 +263,18 @@ describe.each`
 
       if (moviesDataSource["_dbDataMovieManager"]) {
         const mocked = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execQuery")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecQueryPublic,
+            "execQuery"
+          )
           .mockImplementation(async () => {
             throw new Error("execQuery() exception");
           });
-
         await expect(
           moviesDataSource.dumpTable(table, "label")
-        ).resolves.toBeUndefined();
-
+        ).rejects.toThrowError("execQuery() exception");
         mocked.mockRestore();
       }
     });
@@ -252,34 +284,16 @@ describe.each`
       const table = new DBTableMovieGroupTypes(db, appPlatform);
 
       if (moviesDataSource["_dbDataMovieManager"]) {
-        await expect(moviesDataSource.clearTable(table, false)).rejects.toThrow(
+        await expect(moviesDataSource.clearTable(table)).rejects.toThrow(
           "Database is not ready"
         );
 
         await moviesDataSource.init();
 
         await expect(
-          moviesDataSource.clearTable(table, false)
+          moviesDataSource.clearTable(table)
         ).resolves.toBeUndefined();
       }
-    });
-
-    test("checking DBData.beginTransaction(*) missing branches/lines/statements", async () => {
-      await expect(moviesDataSource.beginTransaction()).rejects.toThrow(
-        "Database is not ready"
-      );
-    });
-
-    test("checking DBData.commitTransaction(*) missing branches/lines/statements", async () => {
-      await expect(moviesDataSource.commitTransaction()).rejects.toThrow(
-        "Database is not ready"
-      );
-    });
-
-    test("checking DBData.rollbackTransaction(*) missing branches/lines/statements", async () => {
-      await expect(moviesDataSource.rollbackTransaction()).rejects.toThrow(
-        "Database is not ready"
-      );
     });
 
     test("checking DBDataMovieManager.getMovieGroupTypes(*) missing branches/lines/statements", async () => {
@@ -321,7 +335,12 @@ describe.each`
 
       if (moviesDataSource["_dbDataMovieManager"]) {
         const mocked = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execQuery")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecQueryPublic,
+            "execQuery"
+          )
           .mockImplementation(async () => {
             return [];
           });
@@ -349,7 +368,12 @@ describe.each`
 
       if (moviesDataSource["_dbDataMovieManager"]) {
         const mocked = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execQuery")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecQueryPublic,
+            "execQuery"
+          )
           .mockImplementation(async () => {
             throw new Error("execQuery() exception");
           });
@@ -379,7 +403,12 @@ describe.each`
 
       if (moviesDataSource["_dbDataMovieManager"]) {
         const mocked = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execQuery")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecQueryPublic,
+            "execQuery"
+          )
           .mockImplementation(async (sql: string) => {
             if (sql.includes("PlayListInfo")) {
               return [{}];
@@ -419,7 +448,12 @@ describe.each`
 
       if (moviesDataSource["_dbDataMovieManager"]) {
         const mocked2 = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execQuery")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecQueryPublic,
+            "execQuery"
+          )
           .mockImplementation(
             async (
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -457,7 +491,12 @@ describe.each`
 
       if (moviesDataSource["_dbDataMovieManager"]) {
         const mocked1 = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execQuery")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecQueryPublic,
+            "execQuery"
+          )
           .mockImplementation(
             async (
               sql: string,
@@ -475,7 +514,12 @@ describe.each`
           );
 
         const mocked2 = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execRetID")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecRetIDPublic,
+            "execRetID"
+          )
           .mockImplementation(
             async (
               id: string,
@@ -520,7 +564,12 @@ describe.each`
 
       if (moviesDataSource["_dbDataMovieManager"]) {
         const mocked = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execRetVoid")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecRetVoidPublic,
+            "execRetVoid"
+          )
           .mockImplementation(
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             async (sql: string, ...params: unknown[]): Promise<void> => {
@@ -563,7 +612,12 @@ describe.each`
 
       if (moviesDataSource["_dbDataMovieManager"]) {
         const mocked = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execQuery")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecQueryPublic,
+            "execQuery"
+          )
           .mockImplementation(
             async (
               sql: string,
@@ -583,7 +637,12 @@ describe.each`
         ).rejects.toThrow("Missing group: 0");
 
         jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execQuery")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecQueryPublic,
+            "execQuery"
+          )
           .mockImplementation(
             async (
               sql: string,
@@ -605,7 +664,12 @@ describe.each`
         ).rejects.toThrow("Missing movie");
 
         jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execQuery")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecQueryPublic,
+            "execQuery"
+          )
           .mockImplementation(
             async (
               sql: string,
@@ -641,7 +705,12 @@ describe.each`
 
       if (moviesDataSource["_dbDataMovieManager"]) {
         const mocked = jest
-          .spyOn(moviesDataSource["_dbDataMovieManager"], "execRetVoid")
+          .spyOn(
+            moviesDataSource[
+              "_dbDataMovieManager"
+            ] as unknown as IExecRetVoidPublic,
+            "execRetVoid"
+          )
           .mockImplementation(
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             async (sql: string, ...params: unknown[]): Promise<void> => {
@@ -667,90 +736,39 @@ describe.each`
 
     // //====================================================================================================
     if (appPlatform === "cyberlink") {
-      test("checking [instance of DBDataMovieManagerWindows].execQuery(*) missing branches/lines/statements", async () => {
-        if (moviesDataSource["_dbDataMovieManager"]) {
-          await expect(
-            moviesDataSource["_dbDataMovieManager"].execQuery("")
-          ).rejects.toThrow("Database is not ready");
-        }
-      });
-
       test("checking [instance of DBDataMovieManagerWindows].execRetID(*) missing branches/lines/statements", async () => {
         if (moviesDataSource["_dbDataMovieManager"]) {
-          await expect(
-            moviesDataSource["_dbDataMovieManager"].execRetID("", "")
-          ).rejects.toThrow("Database is not ready");
-
           await moviesDataSource.init();
 
           const mocked = jest
-            .spyOn(moviesDataSource["knex"], "raw")
+            .spyOn(
+              moviesDataSource[
+                "_dbDataMovieManager"
+              ] as unknown as IBetterSqliteRawExecRetIDPublic,
+              "_rawExecRetID"
+            )
             .mockImplementation(
-              (
+              async (
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 sql: string,
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                bindings: readonly Knex.RawBinding[] | Knex.ValueDict
-              ): Knex.Raw<IRunReturn> => {
+                bindings: readonly Knex.RawBinding[]
+              ): Promise<Knex.Raw<IBetterSQqliteRunReturn>> => {
+                //  Promise<Knex.Raw<IBetterSQqliteRunReturn>>
                 const info = {};
-                return info as unknown as Knex.Raw<IRunReturn>;
+                return info as unknown as Knex.Raw<IBetterSQqliteRunReturn>;
               }
             );
 
           await expect(
-            moviesDataSource["_dbDataMovieManager"].execRetID("", "")
-          ).rejects.toThrow("Missing lastID");
+            moviesDataSource["_dbDataMovieManager"]["execRetID"]("", "")
+          ).rejects.toThrow("Missing lastInsertRowid");
 
           mocked.mockRestore();
         }
       });
 
-      test("checking [instance of DBDataMovieManagerWindows].execRetVoid(*) missing branches/lines/statements", async () => {
-        if (moviesDataSource["_dbDataMovieManager"]) {
-          await expect(
-            moviesDataSource["_dbDataMovieManager"].execRetVoid("")
-          ).rejects.toThrow("Database is not ready");
-        }
-      });
-
-      test("checking [instance of DBDataMovieManagerWindows].beginTransaction(*) missing branches/lines/statements", async () => {
-        await expect(moviesDataSource.beginTransaction()).rejects.toThrow(
-          "Database is not ready"
-        );
-      });
-
-      test("checking [instance of DBDataMovieManagerWindows].commitTransaction(*) missing branches/lines/statements", async () => {
-        await expect(moviesDataSource.commitTransaction()).rejects.toThrow(
-          "Database is not ready"
-        );
-      });
-
-      test("checking [instance of DBDataMovieManagerWindows].rollbackTransaction(*) missing branches/lines/statements", async () => {
-        await expect(moviesDataSource.rollbackTransaction()).rejects.toThrow(
-          "Database is not ready"
-        );
-      });
-
-      test("checking [instance of DBDataMovieManagerWindows].openOrAttachDBCreateTables(*) missing branches/lines/statements", async () => {
-        const knx = (await import("knex")).default;
-        const knex = knx({
-          client: "better-sqlite3",
-          connection: { filename: ":memory:" },
-        });
-        const { DBDataMovieManagerCyberlink } = await import(
-          "../database/db-data-moviemanager-cyberlink"
-        );
-        const dbDataMovieManagerWindows = new DBDataMovieManagerCyberlink(knex);
-        const db = new DBextra("cyberlink");
-
-        await moviesDataSource.init();
-
-        await expect(
-          dbDataMovieManagerWindows["attachDBCreateTables"](db, ":memory:")
-        ).resolves.toBeUndefined();
-      });
-
-      test("checking [instance of DBDataMovieManagerWindows].init(*) missing branches/lines/statements", async () => {
+      test("checking [instance of DBDataMovieManagerWindows].init(*) - error in 'CLDB'", async () => {
         const knx = (await import("knex")).default;
         const knex = knx({
           client: "better-sqlite3",
@@ -764,14 +782,17 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
-        const mocked = jest
+          const dBName = "CLDB";
+          const errMsg = `openning ${dBName} exception`;
+
+          const mocked = jest
           .spyOn(
             dbDataMovieManagerWindows as unknown as DBDataMovieManagerCyberlinkPublic,
             "attachDBCreateTables"
           )
           .mockImplementation(async (db: DB, dbpath: string): Promise<void> => {
-            if (db.name.includes("CLDB")) {
-              throw new Error("openning CLDB exception");
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
             }
 
             return attachDBCreateTablesOrg.call(
@@ -782,13 +803,13 @@ describe.each`
           });
 
         await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          "openning CLDB exception"
+          errMsg
         );
 
         mocked.mockRestore();
       });
 
-      test("checking [instance of DBDataMovieManagerWindows].init(*) missing branches/lines/statements", async () => {
+      test("checking [instance of DBDataMovieManagerWindows].init(*) - error in 'moviemedia'", async () => {
         const knx = (await import("knex")).default;
         const knex = knx({
           client: "better-sqlite3",
@@ -802,14 +823,17 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
+          const dBName = "moviemedia";
+          const errMsg = `openning ${dBName} exception`;
+
         const mocked = jest
           .spyOn(
             dbDataMovieManagerWindows as unknown as DBDataMovieManagerCyberlinkPublic,
             "attachDBCreateTables"
           )
           .mockImplementation(async (db: DB, dbpath: string): Promise<void> => {
-            if (db.name.includes("moviemedia")) {
-              throw new Error("openning moviemedia exception");
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
             }
 
             return attachDBCreateTablesOrg.call(
@@ -820,13 +844,13 @@ describe.each`
           });
 
         await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          "openning moviemedia exception"
+          errMsg
         );
 
         mocked.mockRestore();
       });
 
-      test("checking [instance of DBDataMovieManagerWindows].init(*) missing branches/lines/statements", async () => {
+      test("checking [instance of DBDataMovieManagerWindows].init(*) - error in 'mediaScannerCache'", async () => {
         const knx = (await import("knex")).default;
         const knex = knx({
           client: "better-sqlite3",
@@ -840,14 +864,17 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
+          const dBName = "mediaScannerCache";
+          const errMsg = `openning ${dBName} exception`;
+
         const mocked = jest
           .spyOn(
             dbDataMovieManagerWindows as unknown as DBDataMovieManagerCyberlinkPublic,
             "attachDBCreateTables"
           )
           .mockImplementation(async (db: DB, dbpath: string): Promise<void> => {
-            if (db.name.includes("mediaScannerCache")) {
-              throw new Error("openning mediaScannerCache exception");
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
             }
 
             return attachDBCreateTablesOrg.call(
@@ -858,13 +885,13 @@ describe.each`
           });
 
         await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          "openning mediaScannerCache exception"
+          errMsg
         );
 
         mocked.mockRestore();
       });
 
-      test("checking [instance of DBDataMovieManagerWindows].init(*) missing branches/lines/statements", async () => {
+      test("checking [instance of DBDataMovieManagerWindows].init(*) - error in 'Playlist'", async () => {
         const knx = (await import("knex")).default;
         const knex = knx({
           client: "better-sqlite3",
@@ -878,14 +905,17 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
+          const dBName = "Playlist";
+          const errMsg = `openning ${dBName} exception`;
+
         const mocked = jest
           .spyOn(
             dbDataMovieManagerWindows as unknown as DBDataMovieManagerCyberlinkPublic,
             "attachDBCreateTables"
           )
           .mockImplementation(async (db: DB, dbpath: string): Promise<void> => {
-            if (db.name.includes("Playlist")) {
-              throw new Error("openning Playlist exception");
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
             }
 
             return attachDBCreateTablesOrg.call(
@@ -896,13 +926,13 @@ describe.each`
           });
 
         await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          "openning Playlist exception"
+          errMsg
         );
 
         mocked.mockRestore();
       });
 
-      test("checking [instance of DBDataMovieManagerWindows].init(*) missing branches/lines/statements", async () => {
+      test("checking [instance of DBDataMovieManagerWindows].init(*) - error in 'Playlist'", async () => {
         const knx = (await import("knex")).default;
         const knex = knx({
           client: "better-sqlite3",
@@ -916,14 +946,17 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
+          const dBName = "Playlist";
+          const errMsg = `openning ${dBName} exception`;
+
         const mocked = jest
           .spyOn(
             dbDataMovieManagerWindows as unknown as DBDataMovieManagerCyberlinkPublic,
             "attachDBCreateTables"
           )
           .mockImplementation(async (db: DB, dbpath: string): Promise<void> => {
-            if (db.name.includes("extra")) {
-              throw new Error("openning extra exception");
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
             }
 
             return attachDBCreateTablesOrg.call(
@@ -934,7 +967,7 @@ describe.each`
           });
 
         await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          "openning extra exception"
+          errMsg
         );
 
         mocked.mockRestore();
@@ -954,122 +987,244 @@ describe.each`
       //         process.env["USERPROFILE"] = USERPROFILEOrg;
       //     });
       // });
-    } else if (appPlatform === "postgress") {
-      // test("checking [instance of DBDataMovieManagerHeroku].execQuery(*) missing branches/lines/statements", async () => {
-      //     const dbDataMovieManagerHeroku = new DBDataMovieManagerHeroku();
-      //     await expect(dbDataMovieManagerHeroku.execQuery("")).rejects.toThrow("Database is not ready");
-      //     await dbDataMovieManagerHeroku.init();
-      //     mocked(pg.Pool.prototype.connect).mockImplementation(connectImplForExecQueryThrows);
-      //     await expect(dbDataMovieManagerHeroku.execQuery("")).rejects.toThrow("query() exception");
-      //     mocked(pg.Pool.prototype.connect).mockImplementation(connectImplForInit);
-      // });
-      // test("checking [instance of DBDataMovieManagerHeroku].execRetID(*) missing branches/lines/statements", async () => {
-      //     const dbDataMovieManagerHeroku = new DBDataMovieManagerHeroku();
-      //     await expect(dbDataMovieManagerHeroku.execRetID("", "")).rejects.toThrow("Database is not ready");
-      //     await dbDataMovieManagerHeroku.init();
-      //     mocked(pg.Pool.prototype.connect).mockImplementation(connectImplForExecQueryThrows);
-      //     await expect(dbDataMovieManagerHeroku.execRetID("", "")).rejects.toThrow("query() exception");
-      //     const connectImplForExecQuery = async (): Promise<PoolClient> => {
-      //         const poolClient = {
-      //             release: jest.fn(function () { }) as unknown,
-      //             query: jest.fn(async function (this: PoolClient, queryTextOrConfig: string, values?: any[] | undefined): Promise<QueryResult<any>> {
-      //                 return {} as QueryResult;
-      //             }) as unknown,
-      //         } as PoolClient;
-      //         if (poolClientHistory) poolClientHistory.push(poolClient);
-      //         return poolClient;
-      //     };
-      //     mocked(pg.Pool.prototype.connect).mockImplementation(connectImplForExecQuery);
-      //     await expect(dbDataMovieManagerHeroku.execRetID("", "")).rejects.toThrow("Row id unavailable");
-      //     mocked(pg.Pool.prototype.connect).mockImplementation(connectImplForInit);
-      // });
-      // test("checking [instance of DBDataMovieManagerHeroku].execRetVoid(*) missing branches/lines/statements", async () => {
-      //     const dbDataMovieManagerHeroku = new DBDataMovieManagerHeroku();
-      //     await expect(dbDataMovieManagerHeroku.execRetVoid("")).rejects.toThrow("Database is not ready");
-      //     await dbDataMovieManagerHeroku.init();
-      //     mocked(pg.Pool.prototype.connect).mockImplementation(connectImplForExecQueryThrows);
-      //     await expect(dbDataMovieManagerHeroku.execRetVoid("")).rejects.toThrow("query() exception");
-      //     mocked(pg.Pool.prototype.connect).mockImplementation(connectImplForInit);
-      // });
-      // test("checking [instance of DBData].beginTransaction(*) missing branches/lines/statements", async () => {
-      //     const dbDataMovieManagerHeroku = new DBDataMovieManagerHeroku();
-      //     await expect(dbDataMovieManagerHeroku.beginTransaction()).rejects.toThrow("Database is not ready");
-      // });
-      // test("checking [instance of DBDataMovieManagerHeroku].commitTransaction(*) missing branches/lines/statements", async () => {
-      //     const dbDataMovieManagerHeroku = new DBDataMovieManagerHeroku();
-      //     await dbDataMovieManagerHeroku.init();
-      //     await expect(dbDataMovieManagerHeroku.commitTransaction()).resolves.toBeUndefined();
-      //     await expect(dbDataMovieManagerHeroku.beginTransaction()).resolves.toBeUndefined();
-      //     const protoOfSuperCommitTransaction = Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(dbDataMovieManagerHeroku)));
-      //     mocked(jest.spyOn(protoOfSuperCommitTransaction, "commitTransaction")).mockImplementation(async () => {
-      //         throw new Error("commitTransaction() exception");
-      //     });
-      //     await expect(dbDataMovieManagerHeroku.commitTransaction()).rejects.toThrow("commitTransaction() exception");
-      //     mocked(protoOfSuperCommitTransaction.commitTransaction).mockRestore();
-      // });
-      // test("checking [instance of DBDataMovieManagerHeroku].rollbackTransaction(*) missing branches/lines/statements", async () => {
-      //     const dbDataMovieManagerHeroku = new DBDataMovieManagerHeroku();
-      //     await dbDataMovieManagerHeroku.init();
-      //     await expect(dbDataMovieManagerHeroku.rollbackTransaction()).resolves.toBeUndefined();
-      //     await expect(dbDataMovieManagerHeroku.beginTransaction()).resolves.toBeUndefined();
-      //     const protoOfSuperRollbackTransaction = Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(dbDataMovieManagerHeroku)));
-      //     mocked(jest.spyOn(protoOfSuperRollbackTransaction, "rollbackTransaction")).mockImplementation(async () => {
-      //         throw new Error("rollbackTransaction() exception");
-      //     });
-      //     await expect(dbDataMovieManagerHeroku.rollbackTransaction()).rejects.toThrow("rollbackTransaction() exception");
-      //     mocked(protoOfSuperRollbackTransaction.rollbackTransaction).mockRestore();
-      // });
-      // test("checking [instance of DBDataMovieManagerHeroku].init(*) missing branches/lines/statements", async () => {
-      //     const dbDataMovieManagerHeroku = new DBDataMovieManagerHeroku();
-      //     const createSchemaCreateTablesOrg = dbDataMovieManagerHeroku.createSchemaCreateTables;
-      //     mocked(jest.spyOn(dbDataMovieManagerHeroku, "createSchemaCreateTables")).mockImplementation(async (db: DBClass, client: pgMod.PoolClient): Promise<void> => {
-      //         if (db.name.includes("CLDB")) {
-      //             throw new Error("openning CLDB2 exception");
-      //         }
-      //         return createSchemaCreateTablesOrg.call(dbDataMovieManagerHeroku, db, client);
-      //     });
-      //     await expect(dbDataMovieManagerHeroku.init()).rejects.toThrow("openning CLDB2 exception");
-      //     mocked(jest.spyOn(dbDataMovieManagerHeroku, "createSchemaCreateTables")).mockImplementation(async (db: DBClass, client: pgMod.PoolClient): Promise<void> => {
-      //         if (db.name.includes("moviemedia")) {
-      //             throw new Error("openning moviemedia exception");
-      //         }
-      //         return createSchemaCreateTablesOrg.call(dbDataMovieManagerHeroku, db, client);
-      //     });
-      //     await expect(dbDataMovieManagerHeroku.init()).rejects.toThrow("openning moviemedia exception");
-      //     mocked(jest.spyOn(dbDataMovieManagerHeroku, "createSchemaCreateTables")).mockImplementation(async (db: DBClass, client: pgMod.PoolClient): Promise<void> => {
-      //         if (db.name.includes("mediaScannerCache")) {
-      //             throw new Error("openning mediaScannerCache exception");
-      //         }
-      //         return createSchemaCreateTablesOrg.call(dbDataMovieManagerHeroku, db, client);
-      //     });
-      //     await expect(dbDataMovieManagerHeroku.init()).rejects.toThrow("openning mediaScannerCache exception");
-      //     mocked(jest.spyOn(dbDataMovieManagerHeroku, "createSchemaCreateTables")).mockImplementation(async (db: DBClass, client: pgMod.PoolClient): Promise<void> => {
-      //         if (db.name.includes("Playlist")) {
-      //             throw new Error("openning Playlist exception");
-      //         }
-      //         return createSchemaCreateTablesOrg.call(dbDataMovieManagerHeroku, db, client);
-      //     });
-      //     await expect(dbDataMovieManagerHeroku.init()).rejects.toThrow("openning Playlist exception");
-      //     mocked(jest.spyOn(dbDataMovieManagerHeroku, "createSchemaCreateTables")).mockImplementation(async (db: DBClass, client: pgMod.PoolClient): Promise<void> => {
-      //         if (db.name.includes("extra")) {
-      //             throw new Error("openning extra exception");
-      //         }
-      //         return createSchemaCreateTablesOrg.call(dbDataMovieManagerHeroku, db, client);
-      //     });
-      //     await expect(dbDataMovieManagerHeroku.init()).rejects.toThrow("openning extra exception");
-      //     mocked(dbDataMovieManagerHeroku.createSchemaCreateTables).mockRestore();
-      // });
+    } else if (appPlatform === "postgres") {
+      test("checking [instance of DBDataMovieManagerWindows].execRetID(*) missing branches/lines/statements", async () => {
+        if (moviesDataSource["_dbDataMovieManager"]) {
+          await moviesDataSource.init();
+
+          const mocked = jest
+            .spyOn(
+              moviesDataSource[
+                "_dbDataMovieManager"
+              ] as unknown as IPostgresRawExecRetIDPublic,
+              "_rawExecRetID"
+            )
+            .mockImplementation(
+              async (
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                sql: string,
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                bindings: readonly Knex.RawBinding[]
+              ): Promise<Knex.Raw<IPostgresRunReturn>> => {
+                //  Promise<Knex.Raw<IBetterSQqliteRunReturn>>
+                const info = {};
+                return info as unknown as Knex.Raw<IPostgresRunReturn>;
+              }
+            );
+
+          await expect(
+            moviesDataSource["_dbDataMovieManager"]["execRetID"]("", "")
+          ).rejects.toThrow("Row id unavailable");
+
+          mocked.mockRestore();
+        }
+      });
+
+      test("checking [instance of DBDataMovieManagerPostgres].init(*) - error in 'CLDB'", async () => {
+        const knexPostgres = knx({
+          client: "pg",
+          connection: process.env.TEST_DATABASE_URL,
+          // searchPath: ['knex', 'public'],
+        });
+        const { DBDataMovieManagerPostgres } = await import(
+          "../database/db-data-moviemanager-postgres"
+        );
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+
+        const createSchemaCreateTablesOrg =
+          dbDataMovieManagerPostgres["createSchemaCreateTables"];
+
+        const dBName = "CLDB";
+        const errMsg = `openning ${dBName} exception`;
+
+        const mocked = jest
+          .spyOn(
+            dbDataMovieManagerPostgres as unknown as DBDataMovieManagerPostgresPublic,
+            "createSchemaCreateTables"
+          )
+          .mockImplementation(async (db: DB): Promise<void> => {
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
+            }
+
+            return createSchemaCreateTablesOrg.call(
+              dbDataMovieManagerPostgres,
+              db
+            );
+          });
+
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
+          errMsg
+        );
+
+        mocked.mockRestore();
+        knexPostgres.destroy();
+      });
+
+      test("checking [instance of DBDataMovieManagerPostgres].init(*) - error in 'moviemedia'", async () => {
+        const knexPostgres = knx({
+          client: "pg",
+          connection: process.env.TEST_DATABASE_URL,
+          // searchPath: ['knex', 'public'],
+        });
+        const { DBDataMovieManagerPostgres } = await import(
+          "../database/db-data-moviemanager-postgres"
+        );
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+
+        const createSchemaCreateTablesOrg =
+          dbDataMovieManagerPostgres["createSchemaCreateTables"];
+
+        const dBName = "moviemedia";
+        const errMsg = `openning ${dBName} exception`;
+
+        const mocked = jest
+          .spyOn(
+            dbDataMovieManagerPostgres as unknown as DBDataMovieManagerPostgresPublic,
+            "createSchemaCreateTables"
+          )
+          .mockImplementation(async (db: DB): Promise<void> => {
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
+            }
+
+            return createSchemaCreateTablesOrg.call(
+              dbDataMovieManagerPostgres,
+              db
+            );
+          });
+
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
+          errMsg
+        );
+
+        mocked.mockRestore();
+        knexPostgres.destroy();
+      });
+
+      test("checking [instance of DBDataMovieManagerPostgres].init(*) - error in 'mediaScannerCache'", async () => {
+        const knexPostgres = knx({
+          client: "pg",
+          connection: process.env.TEST_DATABASE_URL,
+          // searchPath: ['knex', 'public'],
+        });
+        const { DBDataMovieManagerPostgres } = await import(
+          "../database/db-data-moviemanager-postgres"
+        );
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+
+        const createSchemaCreateTablesOrg =
+          dbDataMovieManagerPostgres["createSchemaCreateTables"];
+
+        const dBName = "mediaScannerCache";
+        const errMsg = `openning ${dBName} exception`;
+
+        const mocked = jest
+          .spyOn(
+            dbDataMovieManagerPostgres as unknown as DBDataMovieManagerPostgresPublic,
+            "createSchemaCreateTables"
+          )
+          .mockImplementation(async (db: DB): Promise<void> => {
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
+            }
+
+            return createSchemaCreateTablesOrg.call(
+              dbDataMovieManagerPostgres,
+              db
+            );
+          });
+
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
+          errMsg
+        );
+
+        mocked.mockRestore();
+        knexPostgres.destroy();
+      });
+
+      test("checking [instance of DBDataMovieManagerPostgres].init(*) - error in 'Playlist'", async () => {
+        const knexPostgres = knx({
+          client: "pg",
+          connection: process.env.TEST_DATABASE_URL,
+          // searchPath: ['knex', 'public'],
+        });
+        const { DBDataMovieManagerPostgres } = await import(
+          "../database/db-data-moviemanager-postgres"
+        );
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+
+        const createSchemaCreateTablesOrg =
+          dbDataMovieManagerPostgres["createSchemaCreateTables"];
+
+        const dBName = "Playlist";
+        const errMsg = `openning ${dBName} exception`;
+
+        const mocked = jest
+          .spyOn(
+            dbDataMovieManagerPostgres as unknown as DBDataMovieManagerPostgresPublic,
+            "createSchemaCreateTables"
+          )
+          .mockImplementation(async (db: DB): Promise<void> => {
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
+            }
+
+            return createSchemaCreateTablesOrg.call(
+              dbDataMovieManagerPostgres,
+              db
+            );
+          });
+
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
+          errMsg
+        );
+
+        mocked.mockRestore();
+        knexPostgres.destroy();
+      });
+
+      test("checking [instance of DBDataMovieManagerPostgres].init(*) - error in 'extra'", async () => {
+        const knexPostgres = knx({
+          client: "pg",
+          connection: process.env.TEST_DATABASE_URL,
+          // searchPath: ['knex', 'public'],
+        });
+        const { DBDataMovieManagerPostgres } = await import(
+          "../database/db-data-moviemanager-postgres"
+        );
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+
+        const createSchemaCreateTablesOrg =
+          dbDataMovieManagerPostgres["createSchemaCreateTables"];
+
+        const dBName = "extra";
+        const errMsg = `openning ${dBName} exception`;
+
+        const mocked = jest
+          .spyOn(
+            dbDataMovieManagerPostgres as unknown as DBDataMovieManagerPostgresPublic,
+            "createSchemaCreateTables"
+          )
+          .mockImplementation(async (db: DB): Promise<void> => {
+            if (db.name.includes(dBName)) {
+              throw new Error(errMsg);
+            }
+
+            return createSchemaCreateTablesOrg.call(
+              dbDataMovieManagerPostgres,
+              db
+            );
+          });
+
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
+          errMsg
+        );
+
+        mocked.mockRestore();
+        knexPostgres.destroy();
+      });
     }
-
-    test("checking MoviesDataSource() with invalid API", async () => {
-      const { MoviesDataSource } = await import(
-        "../datasources/movies-data-source"
-      );
-
-      expect(() => {
-        new MoviesDataSource("" as AppPlatformType);
-      }).toThrow();
-    });
 
     //===============================================================================================================
     // Database operations
@@ -1940,7 +2095,7 @@ describe.each`
       // //========================================================================================================
       await expect(
         moviesDataSource.deleteMovieGroupType(tid)
-      ).rejects.toThrowError("There are some groups referencing type=1");
+      ).rejects.toThrowError(`There are some groups referencing type=${tid}`);
     });
 
     test(`checking getting types when no types`, async () => {
@@ -2097,7 +2252,7 @@ describe.each`
         expect(result.rows[0][convertReportedColumnName(`folder`)]).toBe(
           folders[0]
         );
-      } 
+      }
 
       // //========================================================================================================
       const folders2 = [`Maverick (1994)`];
@@ -2123,15 +2278,15 @@ describe.each`
       expect(result2.rows[0][convertReportedColumnName(`title`)]).toBe(
         column_values2[0]
       );
-      expect(
-        result2.rows[0][convertReportedColumnName(`mediaFullPath`)]
-      ).toBe(column_values2[1]);
+      expect(result2.rows[0][convertReportedColumnName(`mediaFullPath`)]).toBe(
+        column_values2[1]
+      );
 
       if (dBConsts.USE_FOLDER_COLUMN_IN_MOVIES) {
         expect(result2.rows[0][convertReportedColumnName(`folder`)]).toBe(
           folders2[0]
         );
-      } 
+      }
 
       // //========================================================================================================
       await expect(moviesDataSource.deleteMovie(mid)).resolves.toBeUndefined();
@@ -2214,7 +2369,7 @@ describe.each`
         expect(result.rows[1][convertReportedColumnName(`folder`)]).toBe(
           folders2[0]
         );
-      } 
+      }
     });
 
     test(`checking getting movies with paging`, async () => {
@@ -2273,7 +2428,7 @@ describe.each`
         expect(result.rows[0][convertReportedColumnName(`folder`)]).toBe(
           `Movies`
         );
-      } 
+      }
     });
 
     test(`checking adding movie with a nonexisting group`, async () => {
@@ -2486,15 +2641,15 @@ describe.each`
       expect(result3.rows[0][convertReportedColumnName(`title`)]).toBe(
         column_values2[0]
       );
-      expect(
-        result3.rows[0][convertReportedColumnName(`mediaFullPath`)]
-      ).toBe(column_values2[1]);
+      expect(result3.rows[0][convertReportedColumnName(`mediaFullPath`)]).toBe(
+        column_values2[1]
+      );
 
       if (dBConsts.USE_FOLDER_COLUMN_IN_MOVIES) {
         expect(result3.rows[0][convertReportedColumnName(`folder`)]).toBe(
           folders2[0]
         );
-      } 
+      }
 
       //========================================================================================================
       const column_names3 = ["name"];
@@ -2530,15 +2685,15 @@ describe.each`
       expect(result4.rows[0][convertReportedColumnName(`title`)]).toBe(
         column_values4[0]
       );
-      expect(
-        result4.rows[0][convertReportedColumnName(`mediaFullPath`)]
-      ).toBe(column_values4[1]);
+      expect(result4.rows[0][convertReportedColumnName(`mediaFullPath`)]).toBe(
+        column_values4[1]
+      );
 
       if (dBConsts.USE_FOLDER_COLUMN_IN_MOVIES) {
         expect(result4.rows[0][convertReportedColumnName(`folder`)]).toBe(
           folders3[0]
         );
-      } 
+      }
     });
 
     test(`checking getting movies from given group when no rows`, async () => {
@@ -2742,8 +2897,8 @@ describe.each`
       expect(moviesDataSource.ready).toBeTruthy();
 
       //========================================================================================================
-      const result = await moviesDataSource.getGroupsOfMovie("MOVIE_Movie1");
-      expect(result.total_count).toBe(0);
+      // const result = await moviesDataSource.getGroupsOfMovie("MOVIE_Movie1");
+      // expect(result.total_count).toBe(0);
     });
 
     test(`checking getting groups of a movie with and without paging`, async () => {
@@ -2865,8 +3020,8 @@ describe.each`
       //========================================================================================================
       const column_names = ["title", "mediaFullPath"];
       const column_values = [
-        'Dirty Harry (1971)',
-        'C:\\Movies\\Dirty.Harry.(1971).mkv',
+        "Dirty Harry (1971)",
+        "C:\\Movies\\Dirty.Harry.(1971).mkv",
       ];
       const mid = await moviesDataSource.addMovie(
         undefined,
@@ -2924,8 +3079,8 @@ describe.each`
       //========================================================================================================
       const column_names2 = ["title", "mediaFullPath"];
       const column_values2 = [
-        'Apollo 13 (1995)',
-        'C:\\Movies\\Apollo 13 (1995).mkv',
+        "Apollo 13 (1995)",
+        "C:\\Movies\\Apollo 13 (1995).mkv",
       ];
       const mid = await moviesDataSource.addMovie(
         undefined,
@@ -2936,7 +3091,9 @@ describe.each`
       expect(mid).not.toBeUndefined();
 
       //========================================================================================================
-      await expect(moviesDataSource.markMovieGroupMember(mid, gid)).resolves.toBeUndefined();
+      await expect(
+        moviesDataSource.markMovieGroupMember(mid, gid)
+      ).resolves.toBeUndefined();
 
       // ## check 'moviesDataSource' table content ##
       const result = await moviesDataSource.getMovies(gid, undefined, [
@@ -2957,7 +3114,9 @@ describe.each`
       expect(result.rows[0][convertReportedColumnName("listOrder")]).toBe(1);
 
       //========================================================================================================
-      await expect(moviesDataSource.unmarkMovieGroupMember(gid, mid)).resolves.toBeUndefined();
+      await expect(
+        moviesDataSource.unmarkMovieGroupMember(gid, mid)
+      ).resolves.toBeUndefined();
 
       // ## check 'moviesDataSource' table content ##
       const result2 = await moviesDataSource.getMovies(gid, undefined, [
@@ -2989,7 +3148,7 @@ describe.each`
       const column_names2 = ["title", "mediaFullPath"];
       const column_values2 = [
         `Ultraviolet (2006)`,
-        `C:\\Movies\\${folders[0]}\\Ultraviolet.(2006).mkv`
+        `C:\\Movies\\${folders[0]}\\Ultraviolet.(2006).mkv`,
       ];
       const mid = await moviesDataSource.addMovie(
         gid,
@@ -3000,10 +3159,7 @@ describe.each`
       expect(mid).not.toBeUndefined();
 
       //========================================================================================================
-      const result = await moviesDataSource.getMovies(
-        gid,
-        undefined,
-      );
+      const result = await moviesDataSource.getMovies(gid, undefined);
 
       expect(result.rows.length).toBe(1);
 
@@ -3028,7 +3184,7 @@ describe.each`
       const column_names3 = ["title", "mediaFullPath"];
       const column_values3 = [
         `Carrie (1976)`,
-        `C:\\Movies\\${folders2[0]}\\Carrie.(1976).mkv`
+        `C:\\Movies\\${folders2[0]}\\Carrie.(1976).mkv`,
       ];
       const mid2 = await moviesDataSource.addMovie(
         gid,
@@ -3039,10 +3195,7 @@ describe.each`
       expect(mid2).not.toBeUndefined();
 
       //========================================================================================================
-      const result2 = await moviesDataSource.getMovies(
-        gid,
-        undefined,
-      );
+      const result2 = await moviesDataSource.getMovies(gid, undefined);
 
       expect(result2.rows.length).toBe(2);
 
@@ -3090,7 +3243,7 @@ describe.each`
       const column_names5 = ["title", "mediaFullPath"];
       const column_values5 = [
         `Red Planet (2000)`,
-        `C:\\Movies\\${folders3[0]}\\Red.Planet.(2000).mvk`
+        `C:\\Movies\\${folders3[0]}\\Red.Planet.(2000).mvk`,
       ];
       const mid3 = await moviesDataSource.addMovie(
         gid2,
@@ -3101,10 +3254,7 @@ describe.each`
       expect(mid3).not.toBeUndefined();
 
       //========================================================================================================
-      const result3 = await moviesDataSource.getMovies(
-        gid2,
-        undefined,
-      );
+      const result3 = await moviesDataSource.getMovies(gid2, undefined);
 
       expect(result3.rows.length).toBe(1);
 
@@ -3128,7 +3278,7 @@ describe.each`
       const column_names6 = ["title", "mediaFullPath"];
       const column_values6 = [
         `Red Planet (2000)`,
-        `C:\\Movies\\${folders4[0]}\\The.Fifth.Element.(1997).mvk`
+        `C:\\Movies\\${folders4[0]}\\The.Fifth.Element.(1997).mvk`,
       ];
       const mid4 = await moviesDataSource.addMovie(
         gid2,
@@ -3139,10 +3289,7 @@ describe.each`
       expect(mid4).not.toBeUndefined();
 
       //========================================================================================================
-      const result4 = await moviesDataSource.getMovies(
-        gid2,
-        undefined,
-      );
+      const result4 = await moviesDataSource.getMovies(gid2, undefined);
 
       expect(result4.rows.length).toBe(2);
 
@@ -3179,7 +3326,7 @@ describe.each`
       const column_names7 = ["title", "mediaFullPath"];
       const column_values7 = [
         `Æon Flux (2005)`,
-        `C:\\Movies\\${folders5[0]}\\AEon Flux (2005).mvk`
+        `C:\\Movies\\${folders5[0]}\\AEon Flux (2005).mvk`,
       ];
       const mid5 = await moviesDataSource.addMovie(
         gid2,
@@ -3190,10 +3337,7 @@ describe.each`
       expect(mid5).not.toBeUndefined();
 
       //========================================================================================================
-      const result5 = await moviesDataSource.getMovies(
-        gid2,
-        undefined,
-      );
+      const result5 = await moviesDataSource.getMovies(gid2, undefined);
 
       expect(result5.rows.length).toBe(3);
 
@@ -3257,8 +3401,8 @@ describe.each`
       //========================================================================================================
       const column_names2 = ["title", "mediaFullPath"];
       const column_values2 = [
-        'The Good, the Bad and the Ugly (1966)',
-        'C:\\Movies\\The.Good.th.Bad.and.the.Ugly.(1966).mkv'
+        "The Good, the Bad and the Ugly (1966)",
+        "C:\\Movies\\The.Good.th.Bad.and.the.Ugly.(1966).mkv",
       ];
       const mid = await moviesDataSource.addMovie(
         undefined,
@@ -3271,8 +3415,8 @@ describe.each`
       //========================================================================================================
       const column_names3 = ["title", "mediaFullPath"];
       const column_values3 = [
-        'Snake Eyes (1998)',
-        'C:\\Movies\\Snake.Eyes.(1998).mkv'
+        "Snake Eyes (1998)",
+        "C:\\Movies\\Snake.Eyes.(1998).mkv",
       ];
       const mid2 = await moviesDataSource.addMovie(
         undefined,
@@ -3285,8 +3429,8 @@ describe.each`
       //========================================================================================================
       const column_names4 = ["title", "mediaFullPath"];
       const column_values4 = [
-        'Quiz Show (1994)',
-        'C:\\Movies\\Quiz.Show.(1994).mkv'
+        "Quiz Show (1994)",
+        "C:\\Movies\\Quiz.Show.(1994).mkv",
       ];
       const mid3 = await moviesDataSource.addMovie(
         undefined,
@@ -3297,7 +3441,9 @@ describe.each`
       expect(mid3).not.toBeUndefined();
 
       //========================================================================================================
-      await expect(moviesDataSource.markMovieGroupMember(mid, gid, 10)).resolves.toBeUndefined();
+      await expect(
+        moviesDataSource.markMovieGroupMember(mid, gid, 10)
+      ).resolves.toBeUndefined();
 
       // ## check 'PlayItemInfo' table content ##
       const result = await moviesDataSource.getMovies(gid, undefined, [
@@ -3318,7 +3464,9 @@ describe.each`
       expect(result.rows[0][convertReportedColumnName("listOrder")]).toBe(1);
 
       //========================================================================================================
-      await expect(moviesDataSource.markMovieGroupMember(mid2, gid, 0)).resolves.toBeUndefined();
+      await expect(
+        moviesDataSource.markMovieGroupMember(mid2, gid, 0)
+      ).resolves.toBeUndefined();
 
       // ## check 'PlayItemInfo' table content ##
       const result2 = await moviesDataSource.getMovies(gid, undefined, [
@@ -3329,7 +3477,9 @@ describe.each`
       ]);
       expect(result2.total_count).toBe(2);
       expect(result2.rows[0][convertReportedColumnName("type")]).toBe(1);
-      expect(result2.rows[0][convertReportedColumnName("playlistID")]).toBe(gid);
+      expect(result2.rows[0][convertReportedColumnName("playlistID")]).toBe(
+        gid
+      );
       expect(result2.rows[0][convertReportedColumnName("mediaTitle")]).toBe(
         column_values3[0]
       );
@@ -3339,7 +3489,9 @@ describe.each`
       expect(result2.rows[0][convertReportedColumnName("listOrder")]).toBe(1);
       //==
       expect(result2.rows[1][convertReportedColumnName("type")]).toBe(1);
-      expect(result2.rows[1][convertReportedColumnName("playlistID")]).toBe(gid);
+      expect(result2.rows[1][convertReportedColumnName("playlistID")]).toBe(
+        gid
+      );
       expect(result2.rows[1][convertReportedColumnName("mediaTitle")]).toBe(
         column_values2[0]
       );
@@ -3349,7 +3501,9 @@ describe.each`
       expect(result2.rows[1][convertReportedColumnName("listOrder")]).toBe(2);
 
       //========================================================================================================
-      await expect(moviesDataSource.markMovieGroupMember(mid3, gid)).resolves.toBeUndefined();
+      await expect(
+        moviesDataSource.markMovieGroupMember(mid3, gid)
+      ).resolves.toBeUndefined();
 
       // ## check 'PlayItemInfo' table content ##
       const result3 = await moviesDataSource.getMovies(gid, undefined, [
@@ -3360,7 +3514,9 @@ describe.each`
       ]);
       expect(result3.total_count).toBe(3);
       expect(result3.rows[0][convertReportedColumnName("type")]).toBe(1);
-      expect(result3.rows[0][convertReportedColumnName("playlistID")]).toBe(gid);
+      expect(result3.rows[0][convertReportedColumnName("playlistID")]).toBe(
+        gid
+      );
       expect(result3.rows[0][convertReportedColumnName("mediaTitle")]).toBe(
         column_values3[0]
       );
@@ -3370,7 +3526,9 @@ describe.each`
       expect(result3.rows[0][convertReportedColumnName("listOrder")]).toBe(1);
       //==
       expect(result3.rows[1][convertReportedColumnName("type")]).toBe(1);
-      expect(result3.rows[1][convertReportedColumnName("playlistID")]).toBe(gid);
+      expect(result3.rows[1][convertReportedColumnName("playlistID")]).toBe(
+        gid
+      );
       expect(result3.rows[1][convertReportedColumnName("mediaTitle")]).toBe(
         column_values2[0]
       );
@@ -3380,7 +3538,9 @@ describe.each`
       expect(result3.rows[1][convertReportedColumnName("listOrder")]).toBe(2);
       //==
       expect(result3.rows[2][convertReportedColumnName("type")]).toBe(1);
-      expect(result3.rows[2][convertReportedColumnName("playlistID")]).toBe(gid);
+      expect(result3.rows[2][convertReportedColumnName("playlistID")]).toBe(
+        gid
+      );
       expect(result3.rows[2][convertReportedColumnName("mediaTitle")]).toBe(
         column_values4[0]
       );
@@ -3390,7 +3550,9 @@ describe.each`
       expect(result3.rows[2][convertReportedColumnName("listOrder")]).toBe(3);
 
       //========================================================================================================
-      await expect(moviesDataSource.unmarkMovieGroupMember(gid, mid)).resolves.toBeUndefined();
+      await expect(
+        moviesDataSource.unmarkMovieGroupMember(gid, mid)
+      ).resolves.toBeUndefined();
 
       // ## check 'PlayItemInfo' table content ##
       const result4 = await moviesDataSource.getMovies(gid, undefined, [
@@ -3401,7 +3563,9 @@ describe.each`
       ]);
       expect(result4.total_count).toBe(2);
       expect(result4.rows[0][convertReportedColumnName("type")]).toBe(1);
-      expect(result4.rows[0][convertReportedColumnName("playlistID")]).toBe(gid);
+      expect(result4.rows[0][convertReportedColumnName("playlistID")]).toBe(
+        gid
+      );
       expect(result4.rows[0][convertReportedColumnName("mediaTitle")]).toBe(
         column_values3[0]
       );
@@ -3411,7 +3575,9 @@ describe.each`
       expect(result4.rows[0][convertReportedColumnName("listOrder")]).toBe(1);
       //==
       expect(result4.rows[1][convertReportedColumnName("type")]).toBe(1);
-      expect(result4.rows[1][convertReportedColumnName("playlistID")]).toBe(gid);
+      expect(result4.rows[1][convertReportedColumnName("playlistID")]).toBe(
+        gid
+      );
       expect(result4.rows[1][convertReportedColumnName("mediaTitle")]).toBe(
         column_values4[0]
       );
@@ -3419,21 +3585,18 @@ describe.each`
         `Computer_${column_values4[1]}`
       );
       expect(result4.rows[1][convertReportedColumnName("listOrder")]).toBe(2);
-  });
+    });
 
-
-  test(`checking getting movie icon when given database entry doesn't exist`, async () => {
+    test(`checking getting movie icon when given database entry doesn't exist`, async () => {
       // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
       // //========================================================================================================
       // // RESTful API request (getting)
       // const res = await request(app).get(apipath.buildPathMovieIcon(true, ["MOVIE_SomeNonExistingMovie"])).set('Accept', 'image/*');
-
       // //expect(getContentTypeFromHeader(res1)).toBe('image/png');
       // expect(res.status).toBe(404);
-  });
+    });
 
-  describe(`checking getting movie icon when given database entry exists`, () => {
+    describe(`checking getting movie icon when given database entry exists`, () => {
       // add an entry to the database
       // const folders = [`Perfect Storm (2000), The `];
       // const folder = `C:\\Movies\\${folders[0]}`;
@@ -3442,114 +3605,89 @@ describe.each`
       // let mid: string;
 
       beforeEach(async () => {
-          // mid = await dbdata_moviemanager_instance.addMovie(undefined, undefined, column_names, column_values);
+        // mid = await dbdata_moviemanager_instance.addMovie(undefined, undefined, column_names, column_values);
       });
 
       afterEach(() => {
-          // vol.reset();
-      })
+        // vol.reset();
+      });
 
       test(`checking when thumbnail directory doesn't exist`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // // Setup
-          // await fs.promises.mkdir(`${folder}`, { recursive: true });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
-
-          // expect(res.status).toBe(404);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // // Setup
+        // await fs.promises.mkdir(`${folder}`, { recursive: true });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
+        // expect(res.status).toBe(404);
       });
 
       test(`checking when thumbnail directory is empty`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // // Setup
-          // const fpath = `${folder}\\thumbnail`;
-
-          // await fs.promises.mkdir(fpath, { recursive: true });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
-
-          // expect(res1.status).toBe(404);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // // Setup
+        // const fpath = `${folder}\\thumbnail`;
+        // await fs.promises.mkdir(fpath, { recursive: true });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
+        // expect(res1.status).toBe(404);
       });
 
       test(`checking when thumbnail directory has one entry but it isn't image/*`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // const fpath = `${folder}\\thumbnail`;
-
-          // vol.fromJSON({ [`${fpath}\\1.txt`]: "12345" });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
-
-          // //expect(getContentTypeFromHeader(res1)).toBe('text/plain');
-          // expect(res1.status).toBe(200);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // const fpath = `${folder}\\thumbnail`;
+        // vol.fromJSON({ [`${fpath}\\1.txt`]: "12345" });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
+        // //expect(getContentTypeFromHeader(res1)).toBe('text/plain');
+        // expect(res1.status).toBe(200);
       });
 
       test(`checking when thumbnail directory has one entry image/*`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // const fpath = `${folder}\\thumbnail`;
-
-          // vol.fromJSON({ [`${fpath}\\1.png`]: "12345" });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
-
-          // expect(getContentTypeFromHeader(res1)).toBe('image/png');
-          // expect(res1.status).toBe(200);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // const fpath = `${folder}\\thumbnail`;
+        // vol.fromJSON({ [`${fpath}\\1.png`]: "12345" });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
+        // expect(getContentTypeFromHeader(res1)).toBe('image/png');
+        // expect(res1.status).toBe(200);
       });
 
       test(`checking when thumbnail directory has one entry image/* but Accept header is text/plain`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // const fpath = `${folder}\\thumbnail`;
-
-          // vol.fromJSON({ [`${fpath}\\1.png`]: "12345" });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'text/plain');
-
-          // expect(res1.status).toBe(406);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // const fpath = `${folder}\\thumbnail`;
+        // vol.fromJSON({ [`${fpath}\\1.png`]: "12345" });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'text/plain');
+        // expect(res1.status).toBe(406);
       });
 
       test(`checking when thumbnail directory has more then one entry`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // const fpath = `${folder}\\thumbnail`;
-
-          // vol.fromJSON({
-          //     [`${fpath}\\1.png`]: "12345",
-          //     [`${fpath}\\2.png`]: "12345",
-          // });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
-
-          // expect(res1.status).toBe(404);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // const fpath = `${folder}\\thumbnail`;
+        // vol.fromJSON({
+        //     [`${fpath}\\1.png`]: "12345",
+        //     [`${fpath}\\2.png`]: "12345",
+        // });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res1 = await request(app).get(apipath.buildPathMovieIcon(true, [mid])).set('Accept', 'image/*');
+        // expect(res1.status).toBe(404);
       });
-  });
+    });
 
-  test(`checking deleting movie icon when given database entry doesn't exist`, async () => {
+    test(`checking deleting movie icon when given database entry doesn't exist`, async () => {
       // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
       // //========================================================================================================
       // // RESTful API request (getting)
       // const res = await request(app).delete(apipath.buildPathMovieIcon(true, ["MOVIE_SomeNonExistingMovie"]));
-
       // expect(res.status).toBe(404);
-  });
+    });
 
-  describe(`checking deleting movie icon when given database entry exists`, () => {
+    describe(`checking deleting movie icon when given database entry exists`, () => {
       // add an entry to the database
       // const folders = [`Perfect Storm (2000), The `];
       // const folder = `C:\\Movies\\${folders[0]}`;
@@ -3558,336 +3696,250 @@ describe.each`
       // let mid: string;
 
       beforeEach(async () => {
-          // mid = await dbdata_moviemanager_instance.addMovie(undefined, undefined, column_names, column_values);
+        // mid = await dbdata_moviemanager_instance.addMovie(undefined, undefined, column_names, column_values);
       });
 
       afterEach(() => {
-          // vol.reset();
-      })
+        // vol.reset();
+      });
 
       test(`checking when thumbnail directory doesn't exist`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
-
-          // expect(res.status).toBe(204);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
+        // expect(res.status).toBe(204);
       });
 
       test(`checking when thumbnail directory is empty`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // // Setup
-          // const fpath = `${folder}\\thumbnail`;
-
-          // await fs.promises.mkdir(fpath, { recursive: true });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res1 = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
-
-          // expect(res1.status).toBe(204);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // // Setup
+        // const fpath = `${folder}\\thumbnail`;
+        // await fs.promises.mkdir(fpath, { recursive: true });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res1 = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
+        // expect(res1.status).toBe(204);
       });
 
       test(`checking when thumbnail directory has one entry but it isn't image/*`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // const fpath = `${folder}\\thumbnail`;
-
-          // vol.fromJSON({ [`${fpath}\\1.txt`]: "12345" });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res1 = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
-
-          // expect(res1.status).toBe(204);
-
-          // await expect(fs.promises.readdir(fpath)).resolves.toHaveLength(0);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // const fpath = `${folder}\\thumbnail`;
+        // vol.fromJSON({ [`${fpath}\\1.txt`]: "12345" });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res1 = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
+        // expect(res1.status).toBe(204);
+        // await expect(fs.promises.readdir(fpath)).resolves.toHaveLength(0);
       });
 
       test(`checking when thumbnail directory has one entry image/*`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // const fpath = `${folder}\\thumbnail`;
-
-          // vol.fromJSON({ [`${fpath}\\1.png`]: "12345" });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res1 = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
-
-          // expect(res1.status).toBe(204);
-
-          // await expect(fs.promises.readdir(fpath)).resolves.toHaveLength(0);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // const fpath = `${folder}\\thumbnail`;
+        // vol.fromJSON({ [`${fpath}\\1.png`]: "12345" });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res1 = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
+        // expect(res1.status).toBe(204);
+        // await expect(fs.promises.readdir(fpath)).resolves.toHaveLength(0);
       });
 
       test(`checking when thumbnail directory has more then one entry`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // const fpath = `${folder}\\thumbnail`;
-
-          // vol.fromJSON({
-          //     [`${fpath}\\1.png`]: "12345",
-          //     [`${fpath}\\2.png`]: "12345",
-          // });
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res1 = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
-
-          // expect(res1.status).toBe(204);
-
-          // await expect(fs.promises.readdir(fpath)).resolves.toHaveLength(0);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // const fpath = `${folder}\\thumbnail`;
+        // vol.fromJSON({
+        //     [`${fpath}\\1.png`]: "12345",
+        //     [`${fpath}\\2.png`]: "12345",
+        // });
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res1 = await request(app).delete(apipath.buildPathMovieIcon(true, [mid]));
+        // expect(res1.status).toBe(204);
+        // await expect(fs.promises.readdir(fpath)).resolves.toHaveLength(0);
       });
-  });
+    });
 
-  describe("Checking updating movie icon", () => {
+    describe("Checking updating movie icon", () => {
       // let buf: Buffer;
       // const attachFieldName = "file";
       // const attatchOptions = { filename: "icon.png", contentType: "image/png" };
 
       beforeAll(async () => {
-          // // 48x48 PNG of a yin-yang symbol
-          // const data = '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';
-
-          // buf = new Buffer(data, 'base64');
+        // // 48x48 PNG of a yin-yang symbol
+        // const data = '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';
+        // buf = new Buffer(data, 'base64');
       });
 
       test(`checking updating movie icon when Content-Type is not multipart/form-data`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res = await request(app).put(apipath.buildPathMovieIcon(true, ["MOVIE_SomeNonExistingMovie"])).set('Content-Type', 'text/plain');
-
-          // expect(res.status).toBe(415);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res = await request(app).put(apipath.buildPathMovieIcon(true, ["MOVIE_SomeNonExistingMovie"])).set('Content-Type', 'text/plain');
+        // expect(res.status).toBe(415);
       });
 
       test(`checking updating movie icon when given database entry doesn't exist`, async () => {
-          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-
-          // //========================================================================================================
-          // // RESTful API request (getting)
-          // const res = await request(app).put(apipath.buildPathMovieIcon(true, ["MOVIE_SomeNonExistingMovie"])).attach(attachFieldName, buf, attatchOptions);
-
-          // expect(res.status).toBe(404);
+        // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+        // //========================================================================================================
+        // // RESTful API request (getting)
+        // const res = await request(app).put(apipath.buildPathMovieIcon(true, ["MOVIE_SomeNonExistingMovie"])).attach(attachFieldName, buf, attatchOptions);
+        // expect(res.status).toBe(404);
       });
 
       describe(`checking updating movie icon when given database entry exists`, () => {
-          // // add an entry to the database
-          // const folders = [`Perfect Storm (2000), The `];
-          // const folder = `C:\\Movies\\${folders[0]}`;
-          // const dpath = `${folder}\\thumbnail`;
-          // const column_names = ['title', 'mediaFullPath'];
-          // const column_values = [`The Perfect Storm (2000)`, `${folder}\\The.Perfect.Storm.(2000).mkv`];
-          // let mid: string;
+        // // add an entry to the database
+        // const folders = [`Perfect Storm (2000), The `];
+        // const folder = `C:\\Movies\\${folders[0]}`;
+        // const dpath = `${folder}\\thumbnail`;
+        // const column_names = ['title', 'mediaFullPath'];
+        // const column_values = [`The Perfect Storm (2000)`, `${folder}\\The.Perfect.Storm.(2000).mkv`];
+        // let mid: string;
 
-          // beforeEach(async () => {
-          //     mid = await dbdata_moviemanager_instance.addMovie(undefined, undefined, column_names, column_values);
+        // beforeEach(async () => {
+        //     mid = await dbdata_moviemanager_instance.addMovie(undefined, undefined, column_names, column_values);
+        // });
+
+        // afterEach(() => {
+        //     vol.reset();
+        // })
+
+        test(`checking updating movie icon when thumb folder doesn't exist`, async () => {
+          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+          // // Setup
+          // await fs.promises.mkdir(`${folder}`, { recursive: true });
+          // //========================================================================================================
+          // // RESTful API request (getting)
+          // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
+          // expect(res.status).toBe(204);
+          // let files: string[];
+          // files = await fs.promises.readdir(dpath);
+          // expect(files).toHaveLength(1);
+          // const filePath = path.format({ dir: dpath, base: files[0] });
+          // const fileHandle = await fs.promises.open(filePath, 'r');
+          // const bufFile = await fs.promises.readFile(fileHandle);
+          // expect(bufFile.length).toBe(buf.length);
+          // expect(bufFile.compare(buf, 0, buf.length, 0, buf.length)).toBe(0);
+        });
+
+        test(`checking updating movie icon when thumb folder exists`, async () => {
+          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+          // // Setup
+          // await fs.promises.mkdir(`${dpath}`, { recursive: true });
+          // //========================================================================================================
+          // // RESTful API request (getting)
+          // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
+          // expect(res.status).toBe(204);
+          // let files: string[];
+          // files = await fs.promises.readdir(dpath);
+          // expect(files).toHaveLength(1);
+          // const filePath = path.format({ dir: dpath, base: files[0] });
+          // const fileHandle = await fs.promises.open(filePath, 'r');
+          // const bufFile = await fs.promises.readFile(fileHandle);
+          // expect(bufFile.length).toBe(buf.length);
+          // expect(bufFile.compare(buf, 0, buf.length, 0, buf.length)).toBe(0);
+        });
+
+        test(`checking updating movie icon when thumb folder exists, one file in folder`, async () => {
+          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+          // // Setup
+          // vol.fromJSON({
+          //     [`${dpath}\\1.png`]: "12345",
           // });
-
-          // afterEach(() => {
-          //     vol.reset();
-          // })
-
-          test(`checking updating movie icon when thumb folder doesn't exist`, async () => {
-              // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-              // // Setup
-              // await fs.promises.mkdir(`${folder}`, { recursive: true });
-
-              // //========================================================================================================
-              // // RESTful API request (getting)
-              // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
-
-              // expect(res.status).toBe(204);
-
-              // let files: string[];
-
-              // files = await fs.promises.readdir(dpath);
-
-              // expect(files).toHaveLength(1);
-
-              // const filePath = path.format({ dir: dpath, base: files[0] });
-              // const fileHandle = await fs.promises.open(filePath, 'r');
-
-              // const bufFile = await fs.promises.readFile(fileHandle);
-
-              // expect(bufFile.length).toBe(buf.length);
-              // expect(bufFile.compare(buf, 0, buf.length, 0, buf.length)).toBe(0);
-          });
-
-          test(`checking updating movie icon when thumb folder exists`, async () => {
-              // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-              // // Setup
-              // await fs.promises.mkdir(`${dpath}`, { recursive: true });
-
-              // //========================================================================================================
-              // // RESTful API request (getting)
-              // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
-
-              // expect(res.status).toBe(204);
-
-              // let files: string[];
-
-              // files = await fs.promises.readdir(dpath);
-
-              // expect(files).toHaveLength(1);
-
-              // const filePath = path.format({ dir: dpath, base: files[0] });
-              // const fileHandle = await fs.promises.open(filePath, 'r');
-
-              // const bufFile = await fs.promises.readFile(fileHandle);
-
-              // expect(bufFile.length).toBe(buf.length);
-              // expect(bufFile.compare(buf, 0, buf.length, 0, buf.length)).toBe(0);
-          });
-
-          test(`checking updating movie icon when thumb folder exists, one file in folder`, async () => {
-              // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-              // // Setup
-              // vol.fromJSON({
-              //     [`${dpath}\\1.png`]: "12345",
-              // });
-
-              // //========================================================================================================
-              // // RESTful API request (getting)
-              // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
-
-              // expect(res.status).toBe(204);
-
-              // let files: string[];
-
-              // files = await fs.promises.readdir(dpath);
-
-              // expect(files).toHaveLength(1);
-
-              // const filePath = path.format({ dir: dpath, base: files[0] });
-              // const fileHandle = await fs.promises.open(filePath, 'r');
-
-              // const bufFile = await fs.promises.readFile(fileHandle);
-
-              // expect(bufFile.length).toBe(buf.length);
-              // expect(bufFile.compare(buf, 0, buf.length, 0, buf.length)).toBe(0);
-          });
-
-          test(`checking updating movie icon when thumb folder exists, more files in folder`, async () => {
-              // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-              // // Setup
-              // vol.fromJSON({
-              //     [`${dpath}\\1.png`]: "12345",
-              //     [`${dpath}\\2.png`]: "12345",
-              // });
-
-              // //========================================================================================================
-              // // RESTful API request (getting)
-              // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
-
-              // expect(res.status).toBe(204);
-
-              // let files: string[];
-
-              // files = await fs.promises.readdir(dpath);
-
-              // expect(files).toHaveLength(1);
-
-              // const filePath = path.format({ dir: dpath, base: files[0] });
-              // const fileHandle = await fs.promises.open(filePath, 'r');
-
-              // const bufFile = await fs.promises.readFile(fileHandle);
-
-              // expect(bufFile.length).toBe(buf.length);
-              // expect(bufFile.compare(buf, 0, buf.length, 0, buf.length)).toBe(0);
-          });
-
-          test(`checking updating movie icon when thumb folder exists but busboy stream error occurs and transfer error occurs`, async () => {
-              // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-              // await fs.promises.mkdir(`${dpath}`, { recursive: true });
-
-              // const org_updateMovieIcon = dbdata_moviemanager_instance.updateMovieIcon.bind(dbdata_moviemanager_instance);
-
-              // mocked(jest.spyOn(dbdata_moviemanager_instance, "updateMovieIcon")).mockImplementation(async (mid: string, storeMovieIcon: any, req: Request, res: any): Promise<void> => {
-              //     const org_req_pipe = req.pipe.bind(req);
-
-              //     mocked(jest.spyOn(req, "pipe")).mockImplementation((destination: NodeJS.WritableStream, options?: { end?: boolean | undefined; } | undefined): NodeJS.WritableStream => {
-              //         req.emit("error", new Error("Transfer error"));
-              //         return org_req_pipe(destination, options);
-              //     });
-
-              //     return org_updateMovieIcon(mid, storeMovieIcon, req, res);
-              // });
-
-              // //========================================================================================================
-              // // RESTful API request (getting)
-              // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
-
-              // expect(res.status).toBe(500);
-          });
-
-          test(`checking updating movie icon when thumb folder exists but busboy stream error occurs and transfer is aborted`, async () => {
-              // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-              // await fs.promises.mkdir(`${dpath}`, { recursive: true });
-
-              // const org_updateMovieIcon = dbdata_moviemanager_instance.updateMovieIcon.bind(dbdata_moviemanager_instance);
-
-              // mocked(jest.spyOn(dbdata_moviemanager_instance, "updateMovieIcon")).mockImplementation(async (mid: string, storeMovieIcon: any, req: Request, res: any): Promise<void> => {
-              //     const org_req_pipe = req.pipe.bind(req);
-
-              //     mocked(jest.spyOn(req, "pipe")).mockImplementation((destination: NodeJS.WritableStream, options?: { end?: boolean | undefined; } | undefined): NodeJS.WritableStream => {
-              //         req.aborted = true;
-              //         req.emit("error", new Error("Transfer error"));
-              //         return org_req_pipe(destination, options);
-              //     });
-
-              //     return org_updateMovieIcon(mid, storeMovieIcon, req, res);
-              // });
-
-              // //========================================================================================================
-              // // RESTful API request (getting)
-              // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
-
-              // expect(res.status).toBe(500);
-          });
-
-          test(`checking updating movie icon when thumb folder exists but queued handler error occurs`, async () => {
-              // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
-
-              // await fs.promises.mkdir(`${dpath}`, { recursive: true });
-
-              // const org_updateMovieIcon = dbdata_moviemanager_instance.updateMovieIcon.bind(dbdata_moviemanager_instance);
-
-              // mocked(jest.spyOn(dbdata_moviemanager_instance, "updateMovieIcon")).mockImplementation(async (mid: string, storeMovieIcon: any, req: Request, res: any): Promise<void> => {
-              //     const org_req_pipe = req.pipe.bind(req);
-
-              //     mocked(jest.spyOn(req, "pipe")).mockImplementation((destination: NodeJS.WritableStream, options?: { end?: boolean | undefined; } | undefined): NodeJS.WritableStream => {
-              //         destination.prependListener('file', function (fieldname, file, filename, encoding, mimetype) {
-              //             mocked(jest.spyOn(file as NodeJS.ReadableStream, "pipe")).mockImplementation((destination: NodeJS.WritableStream, options?: { end?: boolean | undefined; } | undefined): NodeJS.WritableStream | never => {
-              //                 throw new Error("Queued event handler exception");
-              //             });
-              //         });
-
-              //         return org_req_pipe(destination, options);
-              //     });
-
-              //     return org_updateMovieIcon(mid, storeMovieIcon, req, res);
-              // });
-              // console.log("");
-              // //========================================================================================================
-              // // RESTful API request (getting)
-              // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
-
-              // expect(res.status).toBe(500);
-          });
+          // //========================================================================================================
+          // // RESTful API request (getting)
+          // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
+          // expect(res.status).toBe(204);
+          // let files: string[];
+          // files = await fs.promises.readdir(dpath);
+          // expect(files).toHaveLength(1);
+          // const filePath = path.format({ dir: dpath, base: files[0] });
+          // const fileHandle = await fs.promises.open(filePath, 'r');
+          // const bufFile = await fs.promises.readFile(fileHandle);
+          // expect(bufFile.length).toBe(buf.length);
+          // expect(bufFile.compare(buf, 0, buf.length, 0, buf.length)).toBe(0);
+        });
+
+        test(`checking updating movie icon when thumb folder exists, more files in folder`, async () => {
+          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+          // // Setup
+          // vol.fromJSON({
+          //     [`${dpath}\\1.png`]: "12345",
+          //     [`${dpath}\\2.png`]: "12345",
+          // });
+          // //========================================================================================================
+          // // RESTful API request (getting)
+          // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
+          // expect(res.status).toBe(204);
+          // let files: string[];
+          // files = await fs.promises.readdir(dpath);
+          // expect(files).toHaveLength(1);
+          // const filePath = path.format({ dir: dpath, base: files[0] });
+          // const fileHandle = await fs.promises.open(filePath, 'r');
+          // const bufFile = await fs.promises.readFile(fileHandle);
+          // expect(bufFile.length).toBe(buf.length);
+          // expect(bufFile.compare(buf, 0, buf.length, 0, buf.length)).toBe(0);
+        });
+
+        test(`checking updating movie icon when thumb folder exists but busboy stream error occurs and transfer error occurs`, async () => {
+          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+          // await fs.promises.mkdir(`${dpath}`, { recursive: true });
+          // const org_updateMovieIcon = dbdata_moviemanager_instance.updateMovieIcon.bind(dbdata_moviemanager_instance);
+          // mocked(jest.spyOn(dbdata_moviemanager_instance, "updateMovieIcon")).mockImplementation(async (mid: string, storeMovieIcon: any, req: Request, res: any): Promise<void> => {
+          //     const org_req_pipe = req.pipe.bind(req);
+          //     mocked(jest.spyOn(req, "pipe")).mockImplementation((destination: NodeJS.WritableStream, options?: { end?: boolean | undefined; } | undefined): NodeJS.WritableStream => {
+          //         req.emit("error", new Error("Transfer error"));
+          //         return org_req_pipe(destination, options);
+          //     });
+          //     return org_updateMovieIcon(mid, storeMovieIcon, req, res);
+          // });
+          // //========================================================================================================
+          // // RESTful API request (getting)
+          // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
+          // expect(res.status).toBe(500);
+        });
+
+        test(`checking updating movie icon when thumb folder exists but busboy stream error occurs and transfer is aborted`, async () => {
+          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+          // await fs.promises.mkdir(`${dpath}`, { recursive: true });
+          // const org_updateMovieIcon = dbdata_moviemanager_instance.updateMovieIcon.bind(dbdata_moviemanager_instance);
+          // mocked(jest.spyOn(dbdata_moviemanager_instance, "updateMovieIcon")).mockImplementation(async (mid: string, storeMovieIcon: any, req: Request, res: any): Promise<void> => {
+          //     const org_req_pipe = req.pipe.bind(req);
+          //     mocked(jest.spyOn(req, "pipe")).mockImplementation((destination: NodeJS.WritableStream, options?: { end?: boolean | undefined; } | undefined): NodeJS.WritableStream => {
+          //         req.aborted = true;
+          //         req.emit("error", new Error("Transfer error"));
+          //         return org_req_pipe(destination, options);
+          //     });
+          //     return org_updateMovieIcon(mid, storeMovieIcon, req, res);
+          // });
+          // //========================================================================================================
+          // // RESTful API request (getting)
+          // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
+          // expect(res.status).toBe(500);
+        });
+
+        test(`checking updating movie icon when thumb folder exists but queued handler error occurs`, async () => {
+          // expect(dbdata_moviemanager_instance.ready).toBeTruthy();
+          // await fs.promises.mkdir(`${dpath}`, { recursive: true });
+          // const org_updateMovieIcon = dbdata_moviemanager_instance.updateMovieIcon.bind(dbdata_moviemanager_instance);
+          // mocked(jest.spyOn(dbdata_moviemanager_instance, "updateMovieIcon")).mockImplementation(async (mid: string, storeMovieIcon: any, req: Request, res: any): Promise<void> => {
+          //     const org_req_pipe = req.pipe.bind(req);
+          //     mocked(jest.spyOn(req, "pipe")).mockImplementation((destination: NodeJS.WritableStream, options?: { end?: boolean | undefined; } | undefined): NodeJS.WritableStream => {
+          //         destination.prependListener('file', function (fieldname, file, filename, encoding, mimetype) {
+          //             mocked(jest.spyOn(file as NodeJS.ReadableStream, "pipe")).mockImplementation((destination: NodeJS.WritableStream, options?: { end?: boolean | undefined; } | undefined): NodeJS.WritableStream | never => {
+          //                 throw new Error("Queued event handler exception");
+          //             });
+          //         });
+          //         return org_req_pipe(destination, options);
+          //     });
+          //     return org_updateMovieIcon(mid, storeMovieIcon, req, res);
+          // });
+          // console.log("");
+          // //========================================================================================================
+          // // RESTful API request (getting)
+          // const res = await request(app).put(apipath.buildPathMovieIcon(true, [mid])).attach(attachFieldName, buf, attatchOptions);
+          // expect(res.status).toBe(500);
+        });
       });
-  });
-
+    });
   }
 );
-

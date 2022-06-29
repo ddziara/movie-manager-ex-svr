@@ -14,8 +14,25 @@ async function startApolloServer(
   const app = express();
   const httpServer = http.createServer(app);
 
-  const APP_PLATFORM = process.env["APP_PLATFORM"] as AppPlatformType;
+  // const APP_PLATFORM = process.env["APP_PLATFORM"] as AppPlatformType;
+
+  // const knexBetterSqlite = knx({
+  //   client: "better-sqlite3",
+  //   connection: {
+  //     filename: getCyberlinkRootDBPath().concat(getCyberlinkRootDBName()),
+  //   },
+  // })
+    
+  // const knexPostgres = knx({
+  //   client: 'pg',
+  //   connection: process.env.DATABASE_URL,
+  //   // searchPath: ['knex', 'public'],        
+  // }
+  // )
+  
   // const dbSource = new MoviesDataSource(APP_PLATFORM);
+
+
 
   const server = new ApolloServer({
     typeDefs,

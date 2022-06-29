@@ -1,15 +1,7 @@
 import { SQLDataSource } from "datasource-sql";
-import type { Knex } from "knex";
-import { AppPlatformType } from "../common/types";
-import {
-  DBDataMovieManager,
-  IGetRowsFunReturn,
-} from "../database/db-data-moviemanager";
-import { DBDataMovieManagerCyberlink } from "../database/db-data-moviemanager-cyberlink";
-import {
-  getCyberlinkRootDBName,
-  getCyberlinkRootDBPath,
-} from "../database/db-path-cyberlink";
+import { Knex } from "knex";
+import { IGetRowsFunReturn } from "../database/db-data-moviemanager";
+import { DBDataMovieManagerKnexBase } from "../database/db-data-moviemanager-knexs-base";
 import type { DBTable } from "../database/db-table";
 import { LastIdReturnType } from "../database/db-types";
 
@@ -17,40 +9,27 @@ interface IParamFun<TResult = unknown> {
   (...params: unknown[]): TResult;
 }
 
+interface IDBDataMovieManagerKnexBaseConstr {
+  new (
+    knex: Knex<Record<string, unknown>, unknown[]>
+  ): DBDataMovieManagerKnexBase;
+}
+
 export class MoviesDataSource extends SQLDataSource {
-  private _dbDataMovieManager: DBDataMovieManager | undefined;
-  private _appPlatform: AppPlatformType;
+  private _dbDataMovieManager: DBDataMovieManagerKnexBase;
 
-  constructor(appPlatform: AppPlatformType) {
-    let config: Knex.Config = {};
-
-    if (appPlatform === "cyberlink") {
-      const path = getCyberlinkRootDBPath();
-
-      config = {
-        client: "better-sqlite3",
-        connection: {
-          filename: path.concat(getCyberlinkRootDBName()),
-        },
-      };
-    } else if (appPlatform === "postgress") {
-      // TODO:
-      throw new Error("");
-    } else {
-      throw new Error("Unsupported application platform");
-    }
-
-    super(config);
-    this._appPlatform = appPlatform;
+  constructor(
+    knex: Knex<Record<string, unknown>, unknown[]>,
+    dBDataMovieManagerKnexConstr: IDBDataMovieManagerKnexBaseConstr
+  ) {
+    super(knex);
+    this._dbDataMovieManager = new dBDataMovieManagerKnexConstr(this.knex);
   }
 
   async init(): Promise<void> {
-    if (this._appPlatform === "cyberlink") {
-      this._dbDataMovieManager = new DBDataMovieManagerCyberlink(this.knex);
+    if (this._dbDataMovieManager) {
       await this._dbDataMovieManager.init();
       return;
-    } else if (this._appPlatform === "postgress") {
-      throw new Error("");
     }
 
     throw new Error("");
@@ -69,7 +48,7 @@ export class MoviesDataSource extends SQLDataSource {
     fun: IParamFun<TResult> | undefined,
     ...params: unknown[]
   ): TResult {
-    if (fun && this._dbDataMovieManager) {
+    if (fun) {
       return fun(...params);
     } else {
       throw new Error("Database is not ready");
@@ -78,7 +57,7 @@ export class MoviesDataSource extends SQLDataSource {
 
   async dumpTable(table: DBTable, label?: string | undefined): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.dumpTable.bind(
+      this._dbDataMovieManager.dumpTable.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       table,
@@ -87,37 +66,38 @@ export class MoviesDataSource extends SQLDataSource {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async clearTable(table: DBTable, useSchema = true): Promise<void> {
+  async clearTable(table: DBTable): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.clearTable.bind(
+      this._dbDataMovieManager.clearTable.bind(
         this._dbDataMovieManager
-      ) as IParamFun<Promise<void>>
+      ) as IParamFun<Promise<void>>,
+      table
     );
   }
 
-  async beginTransaction(): Promise<void> {
-    return this._callWrapper(
-      this._dbDataMovieManager?.beginTransaction.bind(
-        this._dbDataMovieManager
-      ) as IParamFun<Promise<void>>
-    );
-  }
+  // protected async beginTransaction(): Promise<void> {
+  //   return this._callWrapper(
+  //     this._dbDataMovieManager.beginTransaction.bind(
+  //       this._dbDataMovieManager
+  //     ) as IParamFun<Promise<void>>
+  //   );
+  // }
 
-  async commitTransaction(): Promise<void> {
-    return this._callWrapper(
-      this._dbDataMovieManager?.commitTransaction.bind(
-        this._dbDataMovieManager
-      ) as IParamFun<Promise<void>>
-    );
-  }
+  // protected async commitTransaction(): Promise<void> {
+  //   return this._callWrapper(
+  //     this._dbDataMovieManager.commitTransaction.bind(
+  //       this._dbDataMovieManager
+  //     ) as IParamFun<Promise<void>>
+  //   );
+  // }
 
-  async rollbackTransaction(): Promise<void> {
-    return this._callWrapper(
-      this._dbDataMovieManager?.rollbackTransaction.bind(
-        this._dbDataMovieManager
-      ) as IParamFun<Promise<void>>
-    );
-  }
+  // protected async rollbackTransaction(): Promise<void> {
+  //   return this._callWrapper(
+  //     this._dbDataMovieManager.rollbackTransaction.bind(
+  //       this._dbDataMovieManager
+  //     ) as IParamFun<Promise<void>>
+  //   );
+  // }
 
   async getMovieGroupTypes(
     tid: number | undefined,
@@ -125,7 +105,7 @@ export class MoviesDataSource extends SQLDataSource {
     offset?: number
   ): Promise<IGetRowsFunReturn> {
     return this._callWrapper(
-      this._dbDataMovieManager?.getMovieGroupTypes.bind(
+      this._dbDataMovieManager.getMovieGroupTypes.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<IGetRowsFunReturn>>,
       tid,
@@ -139,7 +119,7 @@ export class MoviesDataSource extends SQLDataSource {
     column_values: unknown[]
   ): Promise<LastIdReturnType> {
     return this._callWrapper(
-      this._dbDataMovieManager?.addMovieGroupType.bind(
+      this._dbDataMovieManager.addMovieGroupType.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<LastIdReturnType>>,
       column_names,
@@ -153,7 +133,7 @@ export class MoviesDataSource extends SQLDataSource {
     column_values: unknown[]
   ): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.updateMovieGroupType.bind(
+      this._dbDataMovieManager.updateMovieGroupType.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       tid,
@@ -164,7 +144,7 @@ export class MoviesDataSource extends SQLDataSource {
 
   async deleteMovieGroupType(tid: number): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.deleteMovieGroupType.bind(
+      this._dbDataMovieManager.deleteMovieGroupType.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       tid
@@ -179,7 +159,7 @@ export class MoviesDataSource extends SQLDataSource {
     offset?: number
   ): Promise<IGetRowsFunReturn> {
     return this._callWrapper(
-      this._dbDataMovieManager?.getMovieGroups.bind(
+      this._dbDataMovieManager.getMovieGroups.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<IGetRowsFunReturn>>,
       tid,
@@ -197,7 +177,7 @@ export class MoviesDataSource extends SQLDataSource {
     column_values: unknown[]
   ): Promise<LastIdReturnType> {
     return this._callWrapper(
-      this._dbDataMovieManager?.addMovieGroup.bind(
+      this._dbDataMovieManager.addMovieGroup.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<LastIdReturnType>>,
       tid,
@@ -213,7 +193,7 @@ export class MoviesDataSource extends SQLDataSource {
     column_values: unknown[]
   ): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.updateMovieGroup.bind(
+      this._dbDataMovieManager.updateMovieGroup.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       gid,
@@ -224,7 +204,7 @@ export class MoviesDataSource extends SQLDataSource {
 
   async deleteMovieGroup(gid: number): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.deleteMovieGroup.bind(
+      this._dbDataMovieManager.deleteMovieGroup.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       gid
@@ -236,7 +216,7 @@ export class MoviesDataSource extends SQLDataSource {
     new_tid: number
   ): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.moveMovieGroup2AnotherType.bind(
+      this._dbDataMovieManager.moveMovieGroup2AnotherType.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       gid,
@@ -246,7 +226,7 @@ export class MoviesDataSource extends SQLDataSource {
 
   async moveMovieGroup2NoType(tid: number, gid: number): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.moveMovieGroup2NoType.bind(
+      this._dbDataMovieManager.moveMovieGroup2NoType.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       tid,
@@ -262,7 +242,7 @@ export class MoviesDataSource extends SQLDataSource {
     offset?: number
   ): Promise<IGetRowsFunReturn> {
     return this._callWrapper(
-      this._dbDataMovieManager?.getMovies.bind(
+      this._dbDataMovieManager.getMovies.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<IGetRowsFunReturn>>,
       gid,
@@ -280,7 +260,7 @@ export class MoviesDataSource extends SQLDataSource {
     column_values: unknown[] /*, mediaFullPath: string*/
   ): Promise<string> {
     return this._callWrapper(
-      this._dbDataMovieManager?.addMovie.bind(
+      this._dbDataMovieManager.addMovie.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<string>>,
       gid,
@@ -296,7 +276,7 @@ export class MoviesDataSource extends SQLDataSource {
     column_values: unknown[]
   ): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.updateMovie.bind(
+      this._dbDataMovieManager.updateMovie.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       mid,
@@ -307,7 +287,7 @@ export class MoviesDataSource extends SQLDataSource {
 
   async deleteMovie(mid: string): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.deleteMovie.bind(
+      this._dbDataMovieManager.deleteMovie.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       mid
@@ -320,7 +300,7 @@ export class MoviesDataSource extends SQLDataSource {
     new_listOrder?: number
   ): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.markMovieGroupMember.bind(
+      this._dbDataMovieManager.markMovieGroupMember.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       mid,
@@ -331,7 +311,7 @@ export class MoviesDataSource extends SQLDataSource {
 
   async unmarkMovieGroupMember(gid: number, mid: string): Promise<void> {
     return this._callWrapper(
-      this._dbDataMovieManager?.unmarkMovieGroupMember.bind(
+      this._dbDataMovieManager.unmarkMovieGroupMember.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<void>>,
       gid,
@@ -345,7 +325,7 @@ export class MoviesDataSource extends SQLDataSource {
     offset?: number
   ): Promise<IGetRowsFunReturn> {
     return this._callWrapper(
-      this._dbDataMovieManager?.getGroupsOfMovie.bind(
+      this._dbDataMovieManager.getGroupsOfMovie.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<IGetRowsFunReturn>>,
       mid,

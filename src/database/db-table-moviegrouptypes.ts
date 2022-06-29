@@ -14,7 +14,7 @@ export class DBTableMovieGroupTypes extends DBTable {
     getSQLCreateText(useTableSchema = true, useIndexSchema = true, useIndexTableSchema = false): string[] {
         const aSqlText: string[] = [];
 
-        if (this.appPlatform === 'postgress') {
+        if (this.appPlatform === 'postgres') {
             const sqlText = `CREATE TABLE IF NOT EXISTS ${useTableSchema ? this.getExtendedName() : this.name} ` +
                 `(` +
                 `_id SERIAL PRIMARY KEY, ` +
