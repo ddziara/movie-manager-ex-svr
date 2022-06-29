@@ -206,17 +206,17 @@ export abstract class DBDataMovieManager extends DBData {
   abstract init(): Promise<DBDataMovieManager>;
   abstract uninit(): Promise<void>;
 
-  abstract execQuery(
+  protected abstract execQuery(
     sql: string,
     ...params: unknown[]
   ): Promise<Record<string, unknown>[]>;
-  abstract execRetID(
+  protected abstract execRetID(
     id: string,
     sql: string,
     ...params: unknown[]
   ): Promise<number>;
-  abstract execRetVoid(sql: string, ...params: unknown[]): Promise<void>;
-  abstract getSQLParameter(index: number): string;
+  protected abstract execRetVoid(sql: string, ...params: unknown[]): Promise<void>;
+  protected abstract getSQLParameter(index: number): string;
 
   /**
    * Method builds sep separated list from array of names. When paramater 's' is not undefined than additional sep
@@ -465,9 +465,9 @@ export abstract class DBDataMovieManager extends DBData {
       }
     );
 
-    console.log(
-      `cond_col_names = ${cond_col_names}, cond_col_values = ${cond_col_values}, cond_col_values_wo_nulls = ${cond_col_values_wo_nulls}`
-    );
+    // console.log(
+    //   `cond_col_names = ${cond_col_names}, cond_col_values = ${cond_col_values}, cond_col_values_wo_nulls = ${cond_col_values_wo_nulls}`
+    // );
     return (await /*database.all(sql, cond_col_values_wo_nulls)*/ this.execQuery(
       sql,
       ...cond_col_values_wo_nulls
@@ -666,7 +666,7 @@ export abstract class DBDataMovieManager extends DBData {
     limit?: number,
     offset?: number
   ): Promise<IGetRowsFunReturn> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     const paging =
       typeof limit !== "undefined" && typeof offset !== "undefined";
@@ -725,7 +725,7 @@ export abstract class DBDataMovieManager extends DBData {
     column_names: string[],
     column_values: unknown[]
   ): Promise<LastIdReturnType> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
     //console.log(`addMovieGroupType`);
 
     const ret = await this.addRowCore(
@@ -750,7 +750,7 @@ export abstract class DBDataMovieManager extends DBData {
     column_names: string[],
     column_values: unknown[]
   ): Promise<void> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     const cond_column_names = [`_id`];
     const cond_column_values = [tid];
@@ -771,7 +771,7 @@ export abstract class DBDataMovieManager extends DBData {
    * @param tid - group identifier
    */
   async deleteMovieGroupType(tid: number): Promise<void> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     await this.beginTransaction();
 
@@ -832,7 +832,7 @@ export abstract class DBDataMovieManager extends DBData {
     limit?: number,
     offset?: number
   ): Promise<IGetRowsFunReturn> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     const paging =
       typeof limit !== "undefined" && typeof offset !== "undefined";
@@ -952,7 +952,7 @@ export abstract class DBDataMovieManager extends DBData {
     column_names: string[],
     column_values: unknown[]
   ): Promise<LastIdReturnType> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     if (typeof tid !== "undefined" && tid !== 0) {
       await this.beginTransaction();
@@ -1114,7 +1114,7 @@ export abstract class DBDataMovieManager extends DBData {
     column_names: string[],
     column_values: unknown[]
   ): Promise<void> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     const d = new Date();
     const d_str = dateToUTCString(d);
@@ -1146,7 +1146,7 @@ export abstract class DBDataMovieManager extends DBData {
    * @param gid - group identifier
    */
   async deleteMovieGroup(gid: number): Promise<void> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     await this.beginTransaction();
 
@@ -1205,7 +1205,7 @@ export abstract class DBDataMovieManager extends DBData {
     gid: number,
     new_tid: number
   ): Promise<void> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     await this.beginTransaction();
 
@@ -1284,7 +1284,7 @@ export abstract class DBDataMovieManager extends DBData {
   }
 
   async moveMovieGroup2NoType(tid: number, gid: number): Promise<void> {
-    if (!this.ready) new Error("Database is not ready");
+    this._throwIfNotReady();
 
     // const validType = true;
 
@@ -1334,7 +1334,7 @@ export abstract class DBDataMovieManager extends DBData {
     limit?: number,
     offset?: number
   ): Promise<IGetRowsFunReturn> {
-    if (!this.ready) new Error("Database is not ready");
+    this._throwIfNotReady();
 
     const paging =
       typeof limit !== "undefined" && typeof offset !== "undefined";
@@ -1343,13 +1343,21 @@ export abstract class DBDataMovieManager extends DBData {
     const movie_tab = `${this.dbmoviemedia.media_info.getExtendedName()}`;
     const playiteminfo_tab = `${this.dbplaylist.playiteminfo.getExtendedName()}`;
 
+    // const withClause = USE_FOLDER_COLUMN_IN_MOVIES
+    //   ? `WITH MediaInfo5 AS (WITH MediaInfo4 AS 
+    //                 (WITH MediaInfo3 AS
+    //                 (WITH MediaInfo2 AS (SELECT rowid, rtrim(_id, replace(_id, '\\', '')) AS _id2 FROM ${movie_tab})
+    //                 SELECT rowid, substr(_id2, 0, length(_id2)) AS _id3 FROM MediaInfo2)
+    //                 SELECT rowid, replace(_id3, rtrim(_id3, replace(_id3, '\\', '')), '') AS _id4 FROM MediaInfo3)
+    //                 SELECT rowid, replace(_id4, ';', ':') AS folder FROM MediaInfo4)`
+    //   : ``;
     const withClause = USE_FOLDER_COLUMN_IN_MOVIES
       ? `WITH MediaInfo5 AS (WITH MediaInfo4 AS 
                     (WITH MediaInfo3 AS
-                    (WITH MediaInfo2 AS (SELECT rowid, rtrim(_id, replace(_id, '\\', '')) AS _id2 FROM ${movie_tab})
-                    SELECT rowid, substr(_id2, 0, length(_id2)) AS _id3 FROM MediaInfo2)
-                    SELECT rowid, replace(_id3, rtrim(_id3, replace(_id3, '\\', '')), '') AS _id4 FROM MediaInfo3)
-                    SELECT rowid, replace(_id4, ';', ':') AS folder FROM MediaInfo4)`
+                    (WITH MediaInfo2 AS (SELECT _id as _rowid, rtrim(_id, replace(_id, '\\', '')) AS _id2 FROM ${movie_tab})
+                    SELECT _rowid, substr(_id2, 0, length(_id2)) AS _id3 FROM MediaInfo2)
+                    SELECT _rowid, replace(_id3, rtrim(_id3, replace(_id3, '\\', '')), '') AS _id4 FROM MediaInfo3)
+                    SELECT _rowid, replace(_id4, ';', ':') AS folder FROM MediaInfo4)`
       : ``;
 
     const table_names = USE_FOLDER_COLUMN_IN_MOVIES
@@ -1415,13 +1423,25 @@ export abstract class DBDataMovieManager extends DBData {
 
     const join_conds: string[] = [];
 
+    // const extra_conds = USE_FOLDER_COLUMN_IN_MOVIES
+    //   ? typeof gid !== "undefined"
+    //     ? [
+    //         `MediaInfo5.rowid = ${movie_tab}.rowid`,
+    //         `substr(${movie_tab}._id, ${MEDIA_INFO_PREFIX.length}) = substr(${playiteminfo_tab}.mediaID, ${PLAY_ITEM_INFO_PREFIX.length})`,
+    //       ]
+    //     : [`MediaInfo5.rowid = ${movie_tab}.rowid`]
+    //   : typeof gid !== "undefined"
+    //   ? [
+    //       `substr(${movie_tab}._id, ${MEDIA_INFO_PREFIX.length}) = substr(${playiteminfo_tab}.mediaID, ${PLAY_ITEM_INFO_PREFIX.length})`,
+    //     ]
+    //   : [];
     const extra_conds = USE_FOLDER_COLUMN_IN_MOVIES
       ? typeof gid !== "undefined"
         ? [
-            `MediaInfo5.rowid = ${movie_tab}.rowid`,
+            `MediaInfo5._rowid = ${movie_tab}._id`,
             `substr(${movie_tab}._id, ${MEDIA_INFO_PREFIX.length}) = substr(${playiteminfo_tab}.mediaID, ${PLAY_ITEM_INFO_PREFIX.length})`,
           ]
-        : [`MediaInfo5.rowid = ${movie_tab}.rowid`]
+        : [`MediaInfo5._rowid = ${movie_tab}._id`]
       : typeof gid !== "undefined"
       ? [
           `substr(${movie_tab}._id, ${MEDIA_INFO_PREFIX.length}) = substr(${playiteminfo_tab}.mediaID, ${PLAY_ITEM_INFO_PREFIX.length})`,
@@ -1473,7 +1493,7 @@ export abstract class DBDataMovieManager extends DBData {
     gid: number,
     new_listOrder?: number
   ): Promise<number> {
-    if (!this.ready) new Error("Database is not ready");
+    this._throwIfNotReady();
 
     // find number of elements in the group
     const group_member_rows = await this.getRowsCore(
@@ -1535,7 +1555,7 @@ export abstract class DBDataMovieManager extends DBData {
     column_names: string[],
     column_values: unknown[] /*, mediaFullPath: string*/
   ): Promise<string> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
     // throw new Error('Missing mediaFullPath column');
 
     let bFound = false;
@@ -1687,7 +1707,7 @@ export abstract class DBDataMovieManager extends DBData {
     column_names: string[],
     column_values: unknown[]
   ): Promise<void> {
-    if (!this.ready) new Error("Database is not ready");
+    this._throwIfNotReady();
 
     const cond_column_names = [`_id`];
     const cond_column_values = [mid];
@@ -1708,7 +1728,7 @@ export abstract class DBDataMovieManager extends DBData {
    * @param mid - group identifier
    */
   async deleteMovie(mid: string): Promise<void> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     await this.beginTransaction();
 
@@ -1727,7 +1747,7 @@ export abstract class DBDataMovieManager extends DBData {
 
   // movie icon
   // async getMovieIcon(mid: string, sendMovieIcon: ISendMovieIconFun, res: express.Response): Promise<void> {
-  //     if (!this.ready) throw new Error('Database is not ready');
+  //  this._throwIfNotReady();
 
   //     await this.beginTransaction();
 
@@ -1747,7 +1767,7 @@ export abstract class DBDataMovieManager extends DBData {
   // };
 
   // async updateMovieIcon(mid: string, storeMovieIcon: IStoreMovieIconFun, req: express.Request, res: express.Response): Promise<void> {
-  //     if (!this.ready) throw new Error('Database is not ready');
+  //   this._throwIfNotReady();
 
   //     await this.beginTransaction();
 
@@ -1766,7 +1786,7 @@ export abstract class DBDataMovieManager extends DBData {
   // };
 
   // async deleteMovieIcon(mid: string, removeMovieIcon: IRemoveMovieIconFun): Promise<void> {
-  //     if (!this.ready) throw new Error('Database is not ready');
+  //   this._throwIfNotReady();
 
   //     await this.beginTransaction();
 
@@ -1796,7 +1816,7 @@ export abstract class DBDataMovieManager extends DBData {
     new_gid: number,
     new_listOrder?: number
   ): Promise<void> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     await this.beginTransaction();
 
@@ -1887,7 +1907,7 @@ export abstract class DBDataMovieManager extends DBData {
   }
 
   async unmarkMovieGroupMember(gid: number, mid: string): Promise<void> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     const media_id = this.mediaFullPath2id(
       mid.substr(MEDIA_INFO_PREFIX.length),
@@ -1923,7 +1943,7 @@ export abstract class DBDataMovieManager extends DBData {
     limit?: number,
     offset?: number
   ): Promise<IGetRowsFunReturn> {
-    if (!this.ready) throw new Error("Database is not ready");
+    this._throwIfNotReady();
 
     // const paging =
     //   typeof limit !== "undefined" && typeof offset !== "undefined";

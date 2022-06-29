@@ -13,7 +13,7 @@ export class DBTableGroupInfo extends DBTable {
     getSQLCreateText(useTableSchema = true, useIndexSchema = true, useIndexTableSchema = false): string[] {
         const aSqlText: string[] = [];
 
-        if (this.appPlatform === 'postgress') {
+        if (this.appPlatform === 'postgres') {
             const sqlText = `CREATE TABLE IF NOT EXISTS ${useTableSchema ? this.getExtendedName() : this.name}` +
                 `(` +
                 `_id SERIAL PRIMARY KEY,` +
@@ -54,7 +54,7 @@ export class DBTableGroupInfo extends DBTable {
             aSqlText.push(sqlText);
         }
 
-        if ((this.appPlatform === 'postgress') || (this.appPlatform === 'cyberlink')) {
+        if ((this.appPlatform === 'postgres') || (this.appPlatform === 'cyberlink')) {
             const indexName1 = 'GROUPINFO_TYPE_MEDIANAME_INDEX';
             const sqlIndexText1 = `CREATE INDEX IF NOT EXISTS ${useIndexSchema ? this.getExtendedName(indexName1) : indexName1} ` +
                 `ON ${useIndexTableSchema ? this.getExtendedName() : this.name} (type, mediaName)`;

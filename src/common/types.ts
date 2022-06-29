@@ -1,1 +1,1 @@
-export type AppPlatformType = "cyberlink" | "postgress";
+export type AppPlatformType = "cyberlink" | "postgres";

@@ -14,7 +14,7 @@ export class DBTableCreationInfo extends DBTable {
     getSQLCreateText(useSchema = true, useIndexSchema = true, useIndexTableSchema = false): string[] {
         const aSqlText: string[] = []
 
-        if (this.appPlatform === 'postgress') {
+        if (this.appPlatform === 'postgres') {
             const sqlText = `CREATE TABLE IF NOT EXISTS ${useSchema ? this.getExtendedName() : this.name}` +
                 `(` +
                 `_id SERIAL PRIMARY KEY,` +

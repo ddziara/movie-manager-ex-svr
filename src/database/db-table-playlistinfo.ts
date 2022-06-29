@@ -13,7 +13,7 @@ export class DBTablePlayListInfo extends DBTable {
     getSQLCreateText(useTableSchema = true, useIndexSchema = true, useIndexTableSchema = false): string[] {
         const aSqlText: string[] = [];
 
-        if (this.appPlatform === 'postgress') {
+        if (this.appPlatform === 'postgres') {
             const sqlText = `CREATE TABLE IF NOT EXISTS ${useTableSchema ? this.getExtendedName() : this.name}` +
                 `(` +
                 `_id SERIAL PRIMARY KEY,` +
@@ -48,7 +48,7 @@ export class DBTablePlayListInfo extends DBTable {
             aSqlText.push(sqlText);
         }
 
-        if ((this.appPlatform === 'postgress') || (this.appPlatform === 'cyberlink')) {
+        if ((this.appPlatform === 'postgres') || (this.appPlatform === 'cyberlink')) {
             const indexName = 'PLAYLISTINFO_NAME_INDEX';
             const sqlIndexText = `CREATE INDEX IF NOT EXISTS ${useIndexSchema ? this.getExtendedName(indexName) : indexName} ` +
                 `ON ${useIndexTableSchema ? this.getExtendedName() : this.name} (type, name)`;

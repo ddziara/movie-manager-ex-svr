@@ -13,7 +13,7 @@ export class DBTableFaceInfo extends DBTable {
     getSQLCreateText(useTableSchema = true, useIndexSchema = true, useIndexTableSchema = false): string[] {
         const aSqlText: string[] = [];
 
-        if (this.appPlatform === 'postgress') {
+        if (this.appPlatform === 'postgres') {
             const sqlText = `CREATE TABLE IF NOT EXISTS ${useTableSchema ? this.getExtendedName() : this.name}` +
                 `(` +
                 `faceID SERIAL PRIMARY KEY,` +
@@ -34,7 +34,7 @@ export class DBTableFaceInfo extends DBTable {
             aSqlText.push(sqlText);
         }
 
-        if ((this.appPlatform === 'postgress') || (this.appPlatform === 'cyberlink')) {
+        if ((this.appPlatform === 'postgres') || (this.appPlatform === 'cyberlink')) {
             const indexName = 'FACEINFO_FACEID_GROUPID_MEDIAID_INDEX';
             const sqlIndexText = `CREATE INDEX IF NOT EXISTS ${useIndexSchema ? this.getExtendedName(indexName) : indexName} ` +
                 `ON ${useIndexTableSchema ? this.getExtendedName() : this.name} (groupID, mediaID)`;

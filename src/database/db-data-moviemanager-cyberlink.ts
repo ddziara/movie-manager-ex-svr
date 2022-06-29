@@ -1,4 +1,3 @@
-import { DBDataMovieManager } from "./db-data-moviemanager";
 import DEBUG from "debug";
 
 const debug_db = DEBUG.debug("backend:DB");
@@ -18,26 +17,25 @@ import {
   getCyberlinkPathBase,
   getCyberlinkRootDBPath,
 } from "./db-path-cyberlink";
+import { DBDataMovieManagerKnexBase } from "./db-data-moviemanager-knexs-base";
 
-export interface IRunReturn {
+export interface IBetterSQqliteRunReturn {
   changes?: number;
   lastInsertRowid?: number;
 }
 
 const appPlatform: AppPlatformType = "cyberlink";
 
-export class DBDataMovieManagerCyberlink extends DBDataMovieManager {
-  private knex: Knex;
-
+export class DBDataMovieManagerCyberlink extends DBDataMovieManagerKnexBase {
   constructor(knex: Knex) {
     super(
       new DBcldb(appPlatform),
       new DBextra(appPlatform),
       new DBmedia_scanner_cache(appPlatform),
       new DBmoviemedia(appPlatform),
-      new DBplaylist(appPlatform)
+      new DBplaylist(appPlatform),
+      knex
     );
-    this.knex = knex;
   }
 
   private _createMapDBFile(): Map<string, string> {
@@ -63,10 +61,6 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManager {
     await this.execRetVoid(`ATTACH DATABASE '${dbpath}' AS ${db.name}`);
   }
 
-  private _getUseSchema(): boolean {
-    return true;
-  }
-
   private async attachDBCreateTables(db: DB, dbpath: string): Promise<void> {
     await this._createAttachDB(db, dbpath);
 
@@ -75,8 +69,8 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManager {
 
     while ((table = db.getTable(index++)) !== null) {
       const aSql: string[] = table.getSQLCreateText(
-        this._getUseSchema(),
-        this._getUseSchema()
+        this._getUseTableSchema(),
+        this._getUseIndexSchema()
       );
 
       for (const sql of aSql) {
@@ -183,12 +177,7 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManager {
     return this;
   }
 
-  async uninit(): Promise<void> {
-    //      await this.knex.close();
-    this.ready = false;
-  }
-
-  async execQuery(
+  protected async execQuery(
     sql: string,
     ...params: unknown[]
   ): Promise<Record<string, unknown>[]> {
@@ -199,8 +188,15 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManager {
       DBDataMovieManagerCyberlink.count--;
     }
 
-    if (this.knex === undefined) throw new Error("this.knex is undefined");
     return await this.knex.raw(sql, params as Knex.RawBinding);
+  }
+
+  // to make "raw" spyable
+  private async _rawExecRetID(
+    sql: string,
+    bindings: readonly Knex.RawBinding[]
+  ): Promise<Knex.Raw<IBetterSQqliteRunReturn>> {
+    return await this.knex.raw(sql, bindings as Knex.RawBinding);
   }
 
   //
@@ -208,7 +204,7 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManager {
   // The rowid is always available as an undeclared column named ROWID, OID, or _ROWID_ as long as those names are not also used by
   // explicitly declared columns. If the table has a column of type INTEGER PRIMARY KEY then that column is another alias for the rowid.
   //
-  async execRetID(
+  protected async execRetID(
     id: string,
     sql: string,
     ...params: unknown[]
@@ -220,24 +216,29 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManager {
       DBDataMovieManagerCyberlink.count--;
     }
 
-    if (this.knex === undefined) throw new Error("this.knex is undefined");
-    const info: IRunReturn = await this.knex.raw(sql, params as Knex.RawBinding);
+    //    const info: IBetterSQqliteRunReturn = await this.knex.raw(sql, params as Knex.RawBinding);
+    const info: IBetterSQqliteRunReturn = await this._rawExecRetID(
+      sql,
+      params as Knex.RawBinding[]
+    );
 
     if (info.lastInsertRowid) return info.lastInsertRowid;
     else throw new MissingLastIdError("Missing lastInsertRowid");
   }
 
-  async execRetVoid(sql: string, ...params: unknown[]): Promise<void> {
+  protected async execRetVoid(
+    sql: string,
+    ...params: unknown[]
+  ): Promise<void> {
     if (DBDataMovieManagerCyberlink.count > 0) {
       DBDataMovieManagerCyberlink.count--;
     }
 
-    if (this.knex === undefined) throw new Error("this.knex is undefined");
     await this.knex.raw(sql, params as Knex.RawBinding);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getSQLParameter(index: number): string {
+  protected getSQLParameter(index: number): string {
     return `?`;
   }
 
