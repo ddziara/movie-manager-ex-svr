@@ -215,7 +215,10 @@ export abstract class DBDataMovieManager extends DBData {
     sql: string,
     ...params: unknown[]
   ): Promise<number>;
-  protected abstract execRetVoid(sql: string, ...params: unknown[]): Promise<void>;
+  protected abstract execRetVoid(
+    sql: string,
+    ...params: unknown[]
+  ): Promise<void>;
   protected abstract getSQLParameter(index: number): string;
 
   /**
@@ -398,14 +401,21 @@ export abstract class DBDataMovieManager extends DBData {
     let order = this.names2StringList(order_col_names, ", ");
     if (order !== "") order = ` ORDER BY ${order}`;
 
-    const paging =
-      typeof limit !== "undefined" && typeof offset !== "undefined";
+    // const paging =
+    //   typeof limit !== "undefined" && typeof offset !== "undefined";
     const count_rows =
       count_name !== "" ? `, COUNT(*) OVER() ${count_name}` : ``;
 
     let sql = `SELECT ${columns_list}${count_rows} FROM ${table_list}${cond}${order}`;
 
-    if (paging) sql += ` LIMIT ${limit} OFFSET ${offset}`;
+    // syntas: [LIMIT a [OFFSET b]]
+    if (limit !== undefined && offset !== undefined) {
+      sql += ` LIMIT ${limit} OFFSET ${offset}`;
+    } else if (limit !== undefined) {
+      sql += ` LIMIT ${limit}`;
+    } else if (offset !== undefined) {
+      sql += ` LIMIT ${Number.MAX_SAFE_INTEGER} OFFSET ${offset}`;
+    }
 
     if (withClause !== "") sql = `${withClause} ${sql}`; // prepend WITH clause
 
@@ -1344,7 +1354,7 @@ export abstract class DBDataMovieManager extends DBData {
     const playiteminfo_tab = `${this.dbplaylist.playiteminfo.getExtendedName()}`;
 
     // const withClause = USE_FOLDER_COLUMN_IN_MOVIES
-    //   ? `WITH MediaInfo5 AS (WITH MediaInfo4 AS 
+    //   ? `WITH MediaInfo5 AS (WITH MediaInfo4 AS
     //                 (WITH MediaInfo3 AS
     //                 (WITH MediaInfo2 AS (SELECT rowid, rtrim(_id, replace(_id, '\\', '')) AS _id2 FROM ${movie_tab})
     //                 SELECT rowid, substr(_id2, 0, length(_id2)) AS _id3 FROM MediaInfo2)

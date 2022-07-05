@@ -9,7 +9,7 @@ interface IParamFun<TResult = unknown> {
   (...params: unknown[]): TResult;
 }
 
-interface IDBDataMovieManagerKnexBaseConstr {
+export interface IDBDataMovieManagerKnexBaseConstr {
   new (
     knex: Knex<Record<string, unknown>, unknown[]>
   ): DBDataMovieManagerKnexBase;

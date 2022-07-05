@@ -1,55 +1,78 @@
 import { gql } from "apollo-server-core";
+import connectionDefs, { buildCoonectionEdgeTypes } from "./connection-defs"
 
-export interface IPlayItemInfo {
-  id: number;
-  type: number;
-  playlistID: number;
-  mediaTitle: string;
-  mediaID: string;
-  listOrder: number;
-}
-
-export enum Visibility {
-  INVISIBLE = 0,
-  VISIBLE = 1,
-}
-
-export interface IPlayListInfo {
-  id: number;
-  type: number;
-  name: string;
-  addDate: string;
-  mediaDate: string;
-  modifyDate: string;
-  place: string;
-  description: string;
-  visible: Visibility;
-  custom: string;
-}
-
-export interface IID {
-  id: number;
-}
-
+//                                                   
+//                  PositionedMovie <----------------- MovieGroup <--------------------- GroupType
+//                         |
+//                         V   
+//                       Movie
+//
 
 //======================================================
 export const typeDefs = gql`
-  type PlayItemInfo {
-    id: ID!
-    type: Int!
-    mediaTitle: String!
-    mediaID: String!
-    listOrder: Int!
-    playListInfo: PlayListInfo!
-  }
-
   enum Visibility {
     INVISIBLE
     VISIBLE
   }
 
-  type PlayListInfo {
-    id: ID!
+  type BigInt {
+    bigIntStr: String!
+  } 
+
+  input BigIntInput {
+    bigIntStr: String!
+  }
+
+  ${connectionDefs} 
+
+  type Movie {
+    _id: ID!
+    mediaFullPath: String!
+    title: String!
+    description: String
+    genre: String
+    length: BigInt                     
+    mediaType: Int!
+    mediaDuration: BigInt              
+    mediaSize: BigInt!
+    mediaRating: Int
+    mediaResume: BigInt
+    resolutionX: Int
+    resolutionY: Int
+    aspectRatioX: Int
+    aspectRatioY: Int
+    thumbnailResolutionX: Int
+    thumbnailResolutionY: Int
+    playCount: Int!
+    stereoType: String!
+    infoFilePath: String
+    isMovieFolder: Boolean
+    visible: Visibility!
+    orientation: Int
+    onlineInfoVisible: Int!
+    releaseDate: String!
+    addDate: String!
+    modifyDate: String!
+    playDate: String!
+    studio: String
+    protected: Boolean  
+    movieGroups: [MovieGroup!]!
+  }
+
+  type PositionedMovie {
+    movie: Movie!
+    listOrder: Int!
+  }
+
+  type GroupType {
+    _id: ID!
+    name: String!
+    description: String
+    movieGroups: [MovieGroup!]!
+  }
+
+  type MovieGroup {
+    _id: ID!
     type: Int!
     name: String!
     addDate: String!
@@ -59,48 +82,101 @@ export const typeDefs = gql`
     description: String
     visible: Visibility!
     custom: String
-    playItemInfos: [PlayItemInfo!]!
+    groupType: GroupType
+    movies: [PositionedMovie!]!
   }
 
+  # type MovieEdge {
+  #   node: Movie!
+  #   cursor: String!
+  #   # here can come additional fields
+  # }
+
+  # type MoviesConnection {
+  #   edges: [MovieEdge]
+  #   pageInfo: PageInfo!
+  #   totalCount: BigInt!            # extra field to inform about total number of rows
+  # }
+
+  ${buildCoonectionEdgeTypes("Movies", "Movie", "Movie")}
+ 
   type Query {
-    playItemInfos: [PlayItemInfo!]!
-    playListInfos: [PlayListInfo!]!
-    playItemInfo(id: ID!): PlayItemInfo
-    playListInfo(id: ID!): PlayListInfo
+    movies(first: Int, after: String, last: Int, before: String, offset: Int): MoviesConnection!
+    movie(_id: ID!): Movie
+    movieGroups: [MovieGroup!]!
+    movieGroup(_id: ID!): MovieGroup
+    groupTypes: [GroupType!]!
+    groupType(_id: ID!): GroupType
+  }
+
+  input AddMovieInfo {
+    mediaFullPath: String!
+    title: String
+    description: String
+    genre: String
+    length: BigIntInput
+    mediaType: Int
+    mediaDuration: BigIntInput
+    mediaSize: BigIntInput
+    mediaRating: Int
+    mediaResume: BigIntInput
+    resolutionX: Int
+    resolutionY: Int
+    aspectRatioX: Int
+    aspectRatioY: Int
+    thumbnailResolutionX: Int
+    thumbnailResolutionY: Int
+    playCount: Int
+    stereoType: String
+    infoFilePath: String
+    isMovieFolder: Boolean
+    visible: Visibility
+    orientation: Int
+    onlineInfoVisible: Int
+    releaseDate: String
+    addDate: String
+    modifyDate: String
+    playDate: String
+    studio: String
+    protected: Boolean  
+  }
+
+  input UpdateMovieInfo {
+    mediaFullPath: String
+    title: String
+    description: String
+    genre: String
+    length: BigIntInput                      
+    mediaType: Int
+    mediaDuration: BigIntInput
+    mediaSize: BigIntInput
+    mediaRating: Int
+    mediaResume: BigIntInput
+    resolutionX: Int
+    resolutionY: Int
+    aspectRatioX: Int
+    aspectRatioY: Int
+    thumbnailResolutionX: Int
+    thumbnailResolutionY: Int
+    playCount: Int
+    stereoType: String
+    infoFilePath: String
+    isMovieFolder: Boolean
+    visible: Visibility
+    orientation: Int
+    onlineInfoVisible: Int
+    releaseDate: String
+    addDate: String
+    modifyDate: String
+    playDate: String
+    studio: String
+    protected: Boolean  
+  }
+
+  type Mutation {
+    addMovie(movieInfo: AddMovieInfo!): ID!
+    updateMovie(_id: ID!, movieInfo: UpdateMovieInfo!): Boolean!
+    deleteMovie(_id: ID!): Boolean!
   }
 `;
-
-export const resolvers = {
-  Visibility: {
-    INVISIBLE: Visibility.INVISIBLE,
-    VISIBLE: Visibility.VISIBLE,
-  },
-
-  Query: {
-    playItemInfos: () => {
-//      return playItemInfo;
-    },
-    playListInfos: () => {
-//      return playListInfo;
-    },
-    playItemInfo: (parent: unknown, { id }: IID) => {
-      // return playItemInfo.find((item) => item.id === +id);
-    },
-    playListInfo: (parent: unknown, { id }: IID) => {
-      // return playListInfo.find((item) => item.id === +id);
-    },
-  },
-
-  PlayItemInfo: {
-    playListInfo: (parent: IPlayItemInfo) => {
-      // return playListInfo.find((item) => item.id === parent.playlistID);
-    },
-  },
-
-  PlayListInfo: {
-    playItemInfos: (parent: IPlayListInfo) => {
-      // return playItemInfo.filter((item) => item.playlistID === parent.id);
-    },
-  },
-};
 
