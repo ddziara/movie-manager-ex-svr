@@ -12,6 +12,7 @@ import { DBmedia_scanner_cache } from "./db-db-media-scanner-cache";
 import { DBmoviemedia } from "./db-db-moviemedia";
 import { DBplaylist } from "./db-db-playlist";
 import knx, { Knex } from "knex";
+import path from "path";
 
 import {
   getCyberlinkPathBase,
@@ -48,10 +49,12 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManagerKnexBase {
     return map;
   }
 
-  private static concatPath(path: string, fname: string): string {
-    const filepath = path.concat(fname);
-
-    return filepath;
+  private static resolvePath(fiilePath: string, fname: string): string {
+    if (fname.trim() !== ":memory:") {
+      return path.resolve(fiilePath, fname);
+    } else {
+      return fname;
+    }
   }
 
   private async _createAttachDB(db: DB, dbpath: string): Promise<void> {
@@ -96,7 +99,7 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManagerKnexBase {
 
           await this.attachDBCreateTables(
             this.dbcldb,
-            DBDataMovieManagerCyberlink.concatPath(cyberlink_base_path, dbpath)
+            DBDataMovieManagerCyberlink.resolvePath(cyberlink_base_path, dbpath)
           );
           debug_db(`Connected to the 'CLDB' database.`);
         } catch (e) {
@@ -112,7 +115,7 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManagerKnexBase {
 
           await this.attachDBCreateTables(
             this.dbmoviemedia,
-            DBDataMovieManagerCyberlink.concatPath(cyberlink_base_path, dbpath)
+            DBDataMovieManagerCyberlink.resolvePath(cyberlink_base_path, dbpath)
           );
           debug_db(`Connected to the 'moviemedia' database.`);
         } catch (e) {
@@ -128,7 +131,7 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManagerKnexBase {
 
           await this.attachDBCreateTables(
             this.dbmediaScannerCache,
-            DBDataMovieManagerCyberlink.concatPath(cyberlink_base_path, dbpath)
+            DBDataMovieManagerCyberlink.resolvePath(cyberlink_base_path, dbpath)
           );
           debug_db(`Connected to the 'mediaScannerCache' database.`);
         } catch (e) {
@@ -144,7 +147,7 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManagerKnexBase {
 
           await this.attachDBCreateTables(
             this.dbplaylist,
-            DBDataMovieManagerCyberlink.concatPath(cyberlink_base_path, dbpath)
+            DBDataMovieManagerCyberlink.resolvePath(cyberlink_base_path, dbpath)
           );
           debug_db(`Connected to the 'playlist' database.`);
         } catch (e) {
@@ -160,7 +163,7 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManagerKnexBase {
 
           await this.attachDBCreateTables(
             this.dbextra,
-            DBDataMovieManagerCyberlink.concatPath(
+            DBDataMovieManagerCyberlink.resolvePath(
               cyberlink_rootdb_path,
               dbpath
             )

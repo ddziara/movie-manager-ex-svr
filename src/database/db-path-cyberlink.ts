@@ -16,7 +16,8 @@
 // }
 
 export const getCyberlinkPathBase = (): string => {
-  return `C:\\Statler\\new-projects\\movie-manager-ex\\DB1034_test\\`;
+  //  return `C:\\Statler\\new-projects\\movie-manager-ex\\DB1034_test\\`;
+  return `C:\\Statler\\DB1034_a\\`;
 };
 
 export const getCyberlinkRootDBPath = (): string => {
