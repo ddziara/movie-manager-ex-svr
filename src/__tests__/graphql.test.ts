@@ -3493,8 +3493,64 @@ describe.each`
         }
       }
 
+      //=====================================================================
+      // Querying directly about nodes
+      //=====================================================================
 
+      // getting all movies
+      const result52 = await testServer.executeOperation({
+        query: `query GetMovies { movies { 
+          nodes {
+            _id title mediaFullPath
+          }
+          pageInfo {
+            hasPreviousPage
+            hasNextPage
+            startCursor
+            endCursor
+          }
+        } 
+      }`,
+      });
 
+      expect(result52.data).toBeTruthy();
+
+      if (result52.data) {
+        const moviesConnection = result52.data["movies"] as IConnection<
+          Partial<IMovie>
+        >;
+        expect(moviesConnection.nodes).not.toBeNull();
+
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
+
+        if (moviesConnection.nodes) {
+          const node0 = moviesConnection.nodes[0];
+          expect(node0._id).toBe(`MOVIE_${mediaFullPath3}`);
+          expect(node0.title).toBe(title3);
+          expect(node0.mediaFullPath).toBe(mediaFullPath3);
+          //===
+          const node1 = moviesConnection.nodes[1];
+          expect(node1._id).toBe(`MOVIE_${mediaFullPath4}`);
+          expect(node1.title).toBe(title4);
+          expect(node1.mediaFullPath).toBe(mediaFullPath4);
+          //===
+          const node2 = moviesConnection.nodes[2];
+          expect(node2._id).toBe(`MOVIE_${mediaFullPath5}`);
+          expect(node2.title).toBe(title5);
+          expect(node2.mediaFullPath).toBe(mediaFullPath5);
+          //===
+          const node3 = moviesConnection.nodes[3];
+          expect(node3._id).toBe(`MOVIE_${mediaFullPath2}`);
+          expect(node3.title).toBe(title2);
+          expect(node3.mediaFullPath).toBe(mediaFullPath2);
+          //===
+          const node4 = moviesConnection.nodes[4];
+          expect(node4._id).toBe(`MOVIE_${mediaFullPath}`);
+          expect(node4.title).toBe(title);
+          expect(node4.mediaFullPath).toBe(mediaFullPath);
+        }
+      }
 
     });
   }

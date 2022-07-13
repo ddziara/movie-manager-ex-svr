@@ -24,11 +24,13 @@ export interface IEdge<T> {
 
 export interface IConnection<T> {
   edges: IEdge<T>[] | null;
+  nodes: T[];
   pageInfo: IPageInfo;
 }
 
 export interface IConnectionResolver<T> {
   edges: IEdge<T>[] | null;
+  nodes: T[] | null;
   pageInfo: IPageInfo;
 }
 
@@ -42,111 +44,6 @@ export const encodeCursor = (cursor: Record<string, unknown>): string => {
   const s = JSON.stringify(cursor);
   return Buffer.from(s).toString("base64");
 };
-
-// interface ILimitOffset {
-//   limit?: number;
-//   offset?: number;
-// }
-
-// export const translateConnectionArgs = (
-//   first: number | undefined,
-//   after: string | undefined,
-//   last: number | undefined,
-//   before: string | undefined,
-//   offset: number | undefined
-// ): ILimitOffset => {
-//   let afterOffset;
-//   let beforeOffset;
-//   let limit;
-
-//   if (first !== undefined) {
-//     if (first < 0) throw new Error("");
-//   }
-
-//   if (last !== undefined) {
-//     if (last < 0) throw new Error("");
-//   }
-
-//   if (after !== undefined) {
-//     afterOffset = _decodeCursor(after);
-//   }
-
-//   if (before !== undefined) {
-//     beforeOffset = _decodeCursor(before);
-//   }
-
-//   if (afterOffset !== undefined && beforeOffset !== undefined) {
-//     //
-//     //    afterOffset
-//     // <- afterOffset+1
-//     //
-//     // <- beforeOffset-1
-//     //    beforeOffset
-//     if (afterOffset + 2 <= beforeOffset) {
-//       // when afterOffset + 2 === beforeOffset
-//       //
-//       //     afterOffset
-//       // <--
-//       //     beforeOffset
-//       //
-//       // then
-//       //  limit = beforeOffset - afterOffset - 1 = afterOffset + 2 - afterOffset - 1 = 1
-//       limit = beforeOffset - afterOffset - 1;
-//     }
-
-//     offset = afterOffset + 1;
-//   } else if (afterOffset !== undefined) {
-//     offset = afterOffset + 1;
-//   } else if (beforeOffset !== undefined) {
-//     if (last !== undefined) {
-//       limit = last;
-//       offset = beforeOffset - last;
-
-//       if (offset < 0) {
-//         limit += offset;
-//         offset = undefined; // 0
-//       }
-//     } else {
-//       //
-//       // <--
-//       //     beforeOffset
-//       //
-//       limit = beforeOffset;
-//       offset = undefined; // 0
-//     }
-//   }
-
-//   if (first !== undefined) {
-//     if (limit !== undefined) {
-//       limit = Math.min(first, limit);
-//     } else {
-//       limit = first;
-//     }
-//   }
-
-//   if (last !== undefined) {
-//     if (limit !== undefined) {
-//       const diff = last - limit;
-
-//       if (diff < 0) {
-//         if (offset !== undefined) {
-//           offset -= diff;
-//         } else {
-//           offset = -diff;
-//         }
-//         limit = last;
-//       }
-//     }
-//     // else {
-//     //   note that it's impossible now to determime the offset
-//     //   it is only known tha  offset >= prev_offset
-//   }
-
-//   return {
-//     limit,
-//     offset,
-//   };
-// };
 
 export const buildConnectionResponse = <T>(
   response: IGetRowsFunReturn,
@@ -205,6 +102,7 @@ export const buildConnectionResponse = <T>(
 
   const connection: IConnectionResolver<Partial<T>> = {
     edges,
+    nodes: response.rows as unknown as Partial<T>[],
     pageInfo: {
       hasPreviousPage: hasPreviousPage2,
       hasNextPage: hasNextPage2,
