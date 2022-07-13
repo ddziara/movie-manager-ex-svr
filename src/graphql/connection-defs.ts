@@ -19,7 +19,6 @@ type ${edgeTypePrefix}Edge {
 type ${connectionTypePrefix}Connection {
     edges: [${edgeTypePrefix}Edge]
     pageInfo: PageInfo!
-    totalCount: Int!            # extra field to inform about total number of rows
 }
 `;
 

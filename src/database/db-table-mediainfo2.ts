@@ -87,6 +87,15 @@ export class DBTableMediaInfo2 extends DBTable {
             aSqlText.push(sqlText);
         }
 
+        if ((this.appPlatform === 'postgres') || (this.appPlatform === 'cyberlink')) {
+            const indexName1 = 'MEDIAINFO_TITLE_ID_INDEX';
+            const sqlIndexText1 = `CREATE UNIQUE INDEX IF NOT EXISTS ${useIndexSchema ? this.getExtendedName(indexName1) : indexName1} ` +
+                `ON ${useIndexTableSchema ? this.getExtendedName() : this.name} (title, _id)`;
+
+            aSqlText.push(sqlIndexText1);
+
+        }
+
         return aSqlText;
     }
 }
