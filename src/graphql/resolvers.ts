@@ -3,9 +3,10 @@ import { MoviesDataSource } from "../datasources/movies-data-source";
 import { IBigInt } from "./bigint";
 import {
   buildConnectionResponse,
+  decodeCursor,
   IConnectionArgs,
   IConnectionResolver,
-  translateConnectionArgs,
+  // translateConnectionArgs,
 } from "./connection";
 
 // export interface IPlayItemInfo {
@@ -228,36 +229,39 @@ export const resolvers = {
       { first, after, last, before, offset }: IConnectionArgs,
       context: IContext
     ): Promise<IConnectionResolver<Partial<IMovie>>> => {
-      const { limit, offset: offset2 } = translateConnectionArgs(
-        first,
-        after,
-        last,
-        before,
-        offset
-      );
+      // const { limit, offset: offset2 } = translateConnectionArgs(
+      //   first,
+      //   after,
+      //   last,
+      //   before,
+      //   offset
+      // );
 
-      let startOffset = offset2 !== undefined ? offset2 : 0;
+      // let startOffset = offset2 !== undefined ? offset2 : 0;
 
       const response = await context.dataSources.moviesDataSource.getMovies(
         undefined,
         undefined,
         movie_ex_column_names,
-        limit,
-        offset2
+        first,
+        after !== undefined ? decodeCursor(after) : undefined,
+        last,
+        before !== undefined ? decodeCursor(before) : undefined,
+        offset,
       );
 
       // special handling when it is unknown what rows are the last ones
-      if (last !== undefined) {
-        if (last < response.rows.length) {
-          startOffset += response.rows.length - last;
-          response.rows = response.rows.slice(-last);
-        }
-      }
+      // if (last !== undefined) {
+      //   if (last < response.rows.length) {
+      //     startOffset += response.rows.length - last;
+      //     response.rows = response.rows.slice(-last);
+      //   }
+      // }
 
       _transform2ValidFields(response.rows, movies_fields_trans_data);
 
       // translate "response.rows" to "edges"
-      return buildConnectionResponse(response, startOffset);
+      return buildConnectionResponse(response, after !== undefined, before !== undefined, ["_id", "title"]);
     },
     movie: async (parent: unknown, { _id }: IIDArgs, context: IContext) => {
       const response = await context.dataSources.moviesDataSource.getMovies(

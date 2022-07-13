@@ -2412,6 +2412,9 @@ describe.each`
         undefined,
         undefined,
         1,
+        undefined,
+        undefined,
+        undefined,
         1
       );
       expect(result.rows.length).toBe(1);
@@ -2793,6 +2796,9 @@ describe.each`
         undefined,
         undefined,
         2,
+        undefined,
+        undefined,
+        undefined,
         1
       );
       expect(result.rows.length).toBe(2);

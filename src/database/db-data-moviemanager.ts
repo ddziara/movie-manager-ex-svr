@@ -41,6 +41,8 @@ export interface IGetRowsFunReturn {
   foreign_id_name?: string;
   rows: RowObject[];
   total_count: number;
+  reversedOrder: boolean;
+  offset: number | undefined;
 }
 
 //==============================
@@ -155,6 +157,26 @@ export interface IUnmarkMovieGroupMemberFun {
 
 export interface IGetGroupsOfMovieFun {
   (mid: string, limit?: number, offset?: number): Promise<IGetRowsFunReturn>;
+}
+
+interface ISearchParams {
+  indexFields: string[];
+  whereConds: string[];
+  whereParams: unknown[];
+  orderByCols: string[];
+  reversedOrder: boolean;
+  limit: number | undefined;
+  offset: number | undefined;
+}
+
+interface ISearchWhere {
+  whereCond: string;
+  params: unknown[];
+}
+
+interface IAdjustRowsResult {
+  rows: RowObject[];
+  offset: number | undefined;
 }
 
 // media prefixes
@@ -444,6 +466,7 @@ export abstract class DBDataMovieManager extends DBData {
     cond_col_values: (unknown | null)[],
     join_conds: string[],
     extra_conds: string[],
+    extra_cond_values: unknown[] | undefined,
     order_col_names: string[],
     join_separators?: string | string[],
     limit?: number,
@@ -480,7 +503,10 @@ export abstract class DBDataMovieManager extends DBData {
     // );
     return (await /*database.all(sql, cond_col_values_wo_nulls)*/ this.execQuery(
       sql,
-      ...cond_col_values_wo_nulls
+      ...[
+        ...cond_col_values_wo_nulls,
+        ...(extra_cond_values ? extra_cond_values : []),
+      ]
     )) as RowObject[];
   }
 
@@ -703,6 +729,7 @@ export abstract class DBDataMovieManager extends DBData {
       cond_col_values,
       join_conds,
       extra_conds,
+      undefined,
       order_col_names,
       undefined,
       limit,
@@ -722,6 +749,8 @@ export abstract class DBDataMovieManager extends DBData {
       id_col_names: this.getListOfIdColNames(id_column_names),
       rows,
       ...total_count_property,
+      reversedOrder: false,
+      offset: undefined,
     };
   }
 
@@ -804,6 +833,7 @@ export abstract class DBDataMovieManager extends DBData {
         gt_cond_col_values,
         [],
         [],
+        undefined,
         []
       );
 
@@ -859,6 +889,7 @@ export abstract class DBDataMovieManager extends DBData {
           [tid],
           [],
           [],
+          undefined,
           []
         );
 
@@ -914,6 +945,7 @@ export abstract class DBDataMovieManager extends DBData {
         cond_col_values,
         join_conds,
         extra_conds,
+        undefined,
         order_col_names,
         " LEFT JOIN ",
         limit,
@@ -941,6 +973,8 @@ export abstract class DBDataMovieManager extends DBData {
         foreign_id_name: `gendid`,
         rows,
         ...total_count_property,
+        reversedOrder: false,
+        offset: undefined,
       };
     } catch (e) {
       //console.log(`$$ e.message = ${e.message}`)
@@ -976,6 +1010,7 @@ export abstract class DBDataMovieManager extends DBData {
           [tid],
           [],
           [],
+          undefined,
           []
         );
 
@@ -1031,6 +1066,7 @@ export abstract class DBDataMovieManager extends DBData {
           [mid],
           [],
           [],
+          undefined,
           []
         );
 
@@ -1179,6 +1215,7 @@ export abstract class DBDataMovieManager extends DBData {
         m_cond_col_values,
         [],
         [],
+        undefined,
         []
       );
 
@@ -1227,6 +1264,7 @@ export abstract class DBDataMovieManager extends DBData {
         [gid],
         [],
         [],
+        undefined,
         []
       );
 
@@ -1247,6 +1285,7 @@ export abstract class DBDataMovieManager extends DBData {
             [new_tid],
             [],
             [],
+            undefined,
             []
           );
 
@@ -1259,6 +1298,7 @@ export abstract class DBDataMovieManager extends DBData {
               [gid],
               [],
               [],
+              undefined,
               []
             );
 
@@ -1309,6 +1349,7 @@ export abstract class DBDataMovieManager extends DBData {
           [tid],
           [],
           [],
+          undefined,
           []
         );
 
@@ -1328,6 +1369,162 @@ export abstract class DBDataMovieManager extends DBData {
     }
   }
 
+  private _buildSearcWhere(
+    indexFields: string[],
+    cursor: Record<string, unknown>,
+    isAfter: boolean
+  ): ISearchWhere {
+    const oper = isAfter ? ">" : "<";
+    const params: unknown[] = [];
+    const sqlParam = this.getSQLParameter(0 /* ignored */);
+
+    const whereCond = indexFields.reduce(
+      (cond: string, key: string, index: number, arr: string[]): string => {
+        if (index > 0) {
+          let eqCond = "";
+
+          for (let i = 0; i < index; i++) {
+            params.push(cursor[arr[i]]);
+            eqCond +=
+              i === 0
+                ? `${arr[i]} = ${sqlParam}`
+                : ` AND ${arr[i]} = ${sqlParam}`;
+          }
+
+          params.push(cursor[key]);
+          eqCond += ` AND ${arr[index]} ${oper} ${sqlParam}`;
+
+          const finish = index < arr.length - 1 ? "" : ")";
+          return `${cond} OR ${eqCond}${finish}`;
+        } else {
+          params.push(cursor[key]);
+          return arr.length > 1
+            ? `(${key} ${oper} ${sqlParam}`
+            : `(${key} ${oper} ${sqlParam})`;
+        }
+      },
+      ""
+    );
+
+    return {
+      whereCond,
+      params,
+    };
+  }
+
+  private _findSearchParams(
+    indexFields: string[], // example: ["title", "_id"]
+    first: number | undefined,
+    after: Record<string, unknown> | undefined,
+    last: number | undefined,
+    before: Record<string, unknown> | undefined,
+    offset: number | undefined
+  ): ISearchParams {
+    const whereConds: string[] = [];
+    const whereParams: unknown[] = [];
+
+    const whereCondAfter =
+      after !== undefined
+        ? this._buildSearcWhere(indexFields, after, true)
+        : undefined;
+    if (whereCondAfter) {
+      whereConds.push(whereCondAfter.whereCond);
+      whereParams.push(...whereCondAfter.params);
+    }
+
+    // check if before cursor is inside edges
+    let beforeIsInside = true;
+
+    if (after && before) {
+      beforeIsInside = false;
+      
+      for (let i = 0; i < indexFields.length; i++) {
+        const key = indexFields[i];
+
+        if (typeof before[key] === "string") {
+          if ((before[key] as string).localeCompare(after[key] as string) > 0) {
+            beforeIsInside = true;
+            break;
+          } else if (
+            (before[key] as string).localeCompare(after[key] as string) < 0
+          ) {
+            break;
+          }
+        } else if (typeof before[key] === "number") {
+          if ((before[key] as number) > (after[key] as number)) {
+            beforeIsInside = true;
+            break;
+          } else if (
+            ((before[key] as number) < (after[key] as number))
+          ) {
+            break;
+          }
+        } else if (typeof before[key] === "bigint") {
+          if ((before[key] as bigint) > (after[key] as bigint)) {
+            beforeIsInside = true;
+            break;
+          } else if (
+            ((before[key] as bigint) < (after[key] as bigint))
+          ) {
+            break;
+          }
+        } else if (typeof before[key] === "boolean") {
+          if ((before[key] as boolean) > (after[key] as boolean)) {
+            beforeIsInside = true;
+            break;
+          } else if (
+            ((before[key] as boolean) < (after[key] as boolean))
+          ) {
+            break;
+          }
+        }
+      }
+    }
+
+    if (beforeIsInside) {
+      const whereBeforeCond =
+        before !== undefined
+          ? this._buildSearcWhere(indexFields, before, false)
+          : undefined;
+      if (whereBeforeCond) {
+        whereConds.push(whereBeforeCond.whereCond);
+        whereParams.push(...whereBeforeCond.params);
+      }
+    }
+
+    const reversedOrder = first === undefined && last !== undefined;
+    const limit = reversedOrder ? last : first;
+    const orderByCols = reversedOrder
+      ? indexFields.map((key) => `${key} DESC`)
+      : [...indexFields];
+
+    return {
+      indexFields,
+      whereConds,
+      whereParams,
+      orderByCols,
+      reversedOrder,
+      limit,
+      offset: after === undefined && before === undefined ? offset : undefined,
+    };
+  }
+
+  private _adjustRowsOffset(
+    rows: RowObject[],
+    reversedOrder: boolean,
+    last: number | undefined,
+    offset: number | undefined
+  ): IAdjustRowsResult {
+    if (reversedOrder) rows.reverse();
+
+    if (last !== undefined && last < rows.length) {
+      offset = rows.length - last;
+      rows = rows.slice(offset);
+    }
+
+    return { rows, offset };
+  }
+
   /*
    * Method get a row/rows from 'Movie' table
    *
@@ -1341,14 +1538,22 @@ export abstract class DBDataMovieManager extends DBData {
     gid: number | undefined,
     mid: string | undefined,
     ex_column_names?: string[] | undefined,
-    limit?: number,
-    offset?: number
+    // limit?: number,
+    first?: number | undefined,
+    after?: Record<string, unknown> | undefined,
+    last?: number | undefined,
+    before?: Record<string, unknown> | undefined,
+    offset?: number | undefined
   ): Promise<IGetRowsFunReturn> {
     this._throwIfNotReady();
 
-    const paging =
-      typeof limit !== "undefined" && typeof offset !== "undefined";
-    if (paging) mid = undefined;
+    if (mid !== undefined) {
+      first = undefined;
+      after = undefined;
+      last = undefined;
+      before = undefined;
+      offset = undefined;
+    }
 
     const movie_tab = `${this.dbmoviemedia.media_info.getExtendedName()}`;
     const playiteminfo_tab = `${this.dbplaylist.playiteminfo.getExtendedName()}`;
@@ -1412,10 +1617,31 @@ export abstract class DBDataMovieManager extends DBData {
           `${movie_tab}.mediaFullPath`,
         ];
 
+    const searchParans =
+      mid !== undefined || gid === undefined
+        ? this._findSearchParams(
+            ["title", "_id"],
+            first,
+            after,
+            last,
+            before,
+            offset
+          )
+        : this._findSearchParams(
+            ["listOrder"],
+            first,
+            after,
+            last,
+            before,
+            offset
+          );
+
     this._appendExColumnNames(
       column_names,
-      typeof gid !== "undefined" ? playiteminfo_tab : movie_tab,
-      ex_column_names
+      mid !== undefined || gid === undefined ? movie_tab : playiteminfo_tab,
+      ex_column_names !== undefined
+        ? ex_column_names.concat(searchParans.indexFields)
+        : searchParans.indexFields
     );
 
     const cond_col_names =
@@ -1458,25 +1684,35 @@ export abstract class DBDataMovieManager extends DBData {
         ]
       : [];
 
-    const order_col_names =
-      typeof mid !== "undefined" || typeof gid === "undefined"
-        ? [`title`]
-        : [/*`playlistID`,*/ `listOrder`];
+    extra_conds.push(...searchParans.whereConds);
 
-    const rows = await this.getRowsCore(
+    const order_col_names = searchParans.orderByCols;
+    // typeof mid !== "undefined" || typeof gid === "undefined"
+    //   ? searchParans.orderByCols
+    //   : [/*`playlistID`,*/ `listOrder`];
+
+    let rows = await this.getRowsCore(
       table_names,
       column_names,
       cond_col_names,
       cond_col_values,
       join_conds,
       extra_conds,
+      searchParans.whereParams,
       order_col_names,
       undefined,
-      limit,
-      offset,
+      searchParans.limit,
+      searchParans.offset,
       undefined,
       withClause
     );
+
+    ({ rows, offset } = this._adjustRowsOffset(
+      rows,
+      searchParans.reversedOrder,
+      last,
+      offset
+    ));
 
     const total_count_property = {
       total_count:
@@ -1491,6 +1727,8 @@ export abstract class DBDataMovieManager extends DBData {
       id_col_names: this.getListOfIdColNames(id_column_names),
       rows,
       ...total_count_property,
+      reversedOrder: searchParans.reversedOrder,
+      offset,
     };
   }
 
@@ -1513,6 +1751,7 @@ export abstract class DBDataMovieManager extends DBData {
       [gid],
       [],
       [],
+      undefined,
       [],
       undefined,
       undefined,
@@ -1596,6 +1835,7 @@ export abstract class DBDataMovieManager extends DBData {
           [gid],
           [],
           [],
+          undefined,
           []
         );
 
@@ -1839,6 +2079,7 @@ export abstract class DBDataMovieManager extends DBData {
         [new_gid],
         [],
         [],
+        undefined,
         []
       );
 
@@ -1852,6 +2093,7 @@ export abstract class DBDataMovieManager extends DBData {
         [mid],
         [],
         [],
+        undefined,
         []
       );
 
@@ -1870,6 +2112,7 @@ export abstract class DBDataMovieManager extends DBData {
         [new_gid, media_id],
         [],
         [],
+        undefined,
         []
       );
 
@@ -1989,6 +2232,7 @@ export abstract class DBDataMovieManager extends DBData {
       cond_col_values,
       join_conds,
       extra_conds,
+      undefined,
       order_col_names,
       [/*' LEFT JOIN ',*/ " JOIN "],
       limit,
@@ -2011,6 +2255,8 @@ export abstract class DBDataMovieManager extends DBData {
       foreign_id_name: `gendid`,
       rows,
       ...total_count_property,
+      reversedOrder: false,
+      offset: undefined,
     };
   }
 }

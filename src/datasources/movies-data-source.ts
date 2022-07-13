@@ -238,8 +238,12 @@ export class MoviesDataSource extends SQLDataSource {
     gid: number | undefined,
     mid: string | undefined,
     ex_column_names?: string[] | undefined,
-    limit?: number,
-    offset?: number
+    // limit?: number,
+    first?: number | undefined,
+    after?: Record<string, unknown> | undefined,
+    last?: number | undefined,
+    before?: Record<string, unknown> | undefined,
+    offset?: number | undefined
   ): Promise<IGetRowsFunReturn> {
     return this._callWrapper(
       this._dbDataMovieManager.getMovies.bind(
@@ -248,7 +252,10 @@ export class MoviesDataSource extends SQLDataSource {
       gid,
       mid,
       ex_column_names,
-      limit,
+      first,
+      after,
+      last,
+      before,
       offset
     );
   }

@@ -70,11 +70,14 @@ export class DBDataMovieManagerPostgres extends DBDataMovieManagerKnexBase {
     const tps = pg.types;
 
     //  timestamp
+    // In Posgres database TIMESTAMP precisions is in microseconds
+    // and in JS type of 'Date' it is miliseconds
     tps.setTypeParser(1114, function (val) {
       const dt = new Date(val + "+0000");
       const d_str = dateToUTCString(dt);
-      return d_str.substr(0, d_str.length - 3);
-    });
+    //  return d_str.substr(0, d_str.length - 3);
+      return d_str;
+  });
 
     //  int8
     tps.setTypeParser(20, function (val) {

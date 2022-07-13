@@ -95,7 +95,6 @@ export const typeDefs = gql`
   # type MoviesConnection {
   #   edges: [MovieEdge]
   #   pageInfo: PageInfo!
-  #   totalCount: BigInt!            # extra field to inform about total number of rows
   # }
 
   ${buildCoonectionEdgeTypes("Movies", "Movie", "Movie")}

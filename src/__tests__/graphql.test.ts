@@ -292,10 +292,11 @@ describe.each`
       const visible = "INVISIBLE";
       const orientation = 1;
       const onlineInfoVisible = 0;
-      const releaseDate = dateToUTCString(new Date());
-      const addDate = dateToUTCString(new Date());
-      const modifyDate = dateToUTCString(new Date());
-      const playDate = dateToUTCString(new Date());
+      const dta = new Date(2022, 6, 13, 10, 58, 8, 348);
+      const releaseDate = dateToUTCString(/*dta*/new Date(2022, 6, 13, 10, 58, 8, 0));  
+      const addDate = dateToUTCString(dta);
+      const modifyDate = dateToUTCString(dta);
+      const playDate = dateToUTCString(dta);
       const studio = "IFC";
       const protectedVal = true;
 
@@ -416,10 +417,11 @@ describe.each`
       const visible2 = "INVISIBLE";
       const orientation2 = 1;
       const onlineInfoVisible2 = 0;
-      const releaseDate2 = dateToUTCString(new Date());
-      const addDate2 = dateToUTCString(new Date());
-      const modifyDate2 = dateToUTCString(new Date());
-      const playDate2 = dateToUTCString(new Date());
+      const dta2 = new Date(2022, 6, 13, 8, 58, 8, 348); // 2022-07-13 08:58:08.348
+      const releaseDate2 = dateToUTCString(dta2);
+      const addDate2 = dateToUTCString(dta2);
+      const modifyDate2 = dateToUTCString(dta2);
+      const playDate2 = dateToUTCString(dta2);
       const studio2 = "Lucas Film";
       const protectedVal2 = true;
 
@@ -544,7 +546,7 @@ describe.each`
       }
     });
 
-    test.only("Paging for movies", async () => {
+    test("Paging for movies", async () => {
       // adding a movie
       const title = `The Perfect Storm (2000)`;
       const folder = `Perfect Storm (2000), The`;
@@ -643,7 +645,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         } 
       }`,
       });
@@ -654,7 +655,6 @@ describe.each`
         const moviesConnection = result6.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -714,7 +714,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -728,7 +727,6 @@ describe.each`
         const moviesConnection = result7.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -766,7 +764,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -785,7 +782,6 @@ describe.each`
         const moviesConnection = result7a.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -823,7 +819,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -842,7 +837,6 @@ describe.each`
         const moviesConnection = result7b.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -873,7 +867,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -892,7 +885,6 @@ describe.each`
         const moviesConnection = result7c.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(0);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -916,7 +908,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -935,7 +926,6 @@ describe.each`
         const moviesConnection = result7d.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -973,7 +963,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -992,7 +981,6 @@ describe.each`
         const moviesConnection = result7e.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -1030,7 +1018,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1049,7 +1036,6 @@ describe.each`
         const moviesConnection = result7f.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(0);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -1067,7 +1053,6 @@ describe.each`
             node { _id title mediaFullPath }
             cursor 
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1081,7 +1066,6 @@ describe.each`
         const moviesConnection = result8.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         if (moviesConnection.edges) {
@@ -1137,7 +1121,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1151,7 +1134,6 @@ describe.each`
         const moviesConnection = result9.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         if (moviesConnection.edges) {
@@ -1200,7 +1182,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1215,7 +1196,6 @@ describe.each`
         const moviesConnection = result10.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -1253,7 +1233,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1272,7 +1251,6 @@ describe.each`
         const moviesConnection = result10a.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -1303,7 +1281,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1322,7 +1299,6 @@ describe.each`
         const moviesConnection = result10b.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -1354,7 +1330,12 @@ describe.each`
             node { _id title mediaFullPath }
             cursor 
           }
-          totalCount
+          pageInfo {
+            hasPreviousPage
+            hasNextPage
+            startCursor
+            endCursor
+          }
         }
       }`,
         variables: {
@@ -1368,8 +1349,10 @@ describe.each`
         const moviesConnection = result11.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
+
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(2);
@@ -1397,7 +1380,12 @@ describe.each`
             node { _id title mediaFullPath }
             cursor 
           }
-          totalCount
+          pageInfo {
+            hasPreviousPage
+            hasNextPage
+            startCursor
+            endCursor
+          }
         }
       }`,
         variables: {
@@ -1412,8 +1400,10 @@ describe.each`
         const moviesConnection = result12.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
+
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(2);
@@ -1421,16 +1411,16 @@ describe.each`
           const edge0 = moviesConnection.edges[0];
           expect(edge0.cursor).toMatch(base64RegExpr);
           const row0 = edge0.node;
-          expect(row0._id).toBe(`MOVIE_${mediaFullPath2}`);
-          expect(row0.title).toBe(title2);
-          expect(row0.mediaFullPath).toBe(mediaFullPath2);
+          expect(row0._id).toBe(`MOVIE_${mediaFullPath4}`);
+          expect(row0.title).toBe(title4);
+          expect(row0.mediaFullPath).toBe(mediaFullPath4);
           //===
           const edge1 = moviesConnection.edges[1];
           expect(edge1.cursor).toMatch(base64RegExpr);
           const row1 = edge1.node;
-          expect(row1._id).toBe(`MOVIE_${mediaFullPath}`);
-          expect(row1.title).toBe(title);
-          expect(row1.mediaFullPath).toBe(mediaFullPath);
+          expect(row1._id).toBe(`MOVIE_${mediaFullPath5}`);
+          expect(row1.title).toBe(title5);
+          expect(row1.mediaFullPath).toBe(mediaFullPath5);
         }
       }
 
@@ -1441,7 +1431,12 @@ describe.each`
             node { _id title mediaFullPath }
             cursor 
           }
-          totalCount
+          pageInfo {
+            hasPreviousPage
+            hasNextPage
+            startCursor
+            endCursor
+          }
         }
       }`,
         variables: {
@@ -1456,8 +1451,10 @@ describe.each`
         const moviesConnection = result13.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
+
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(2);
@@ -1465,16 +1462,16 @@ describe.each`
           const edge0 = moviesConnection.edges[0];
           expect(edge0.cursor).toMatch(base64RegExpr);
           const row0 = edge0.node;
-          expect(row0._id).toBe(`MOVIE_${mediaFullPath2}`);
-          expect(row0.title).toBe(title2);
-          expect(row0.mediaFullPath).toBe(mediaFullPath2);
+          expect(row0._id).toBe(`MOVIE_${mediaFullPath3}`);
+          expect(row0.title).toBe(title3);
+          expect(row0.mediaFullPath).toBe(mediaFullPath3);
           //===
           const edge1 = moviesConnection.edges[1];
           expect(edge1.cursor).toMatch(base64RegExpr);
           const row1 = edge1.node;
-          expect(row1._id).toBe(`MOVIE_${mediaFullPath}`);
-          expect(row1.title).toBe(title);
-          expect(row1.mediaFullPath).toBe(mediaFullPath);
+          expect(row1._id).toBe(`MOVIE_${mediaFullPath4}`);
+          expect(row1.title).toBe(title4);
+          expect(row1.mediaFullPath).toBe(mediaFullPath4);
         }
       }
 
@@ -1485,7 +1482,12 @@ describe.each`
             node { _id title mediaFullPath }
             cursor 
           }
-          totalCount
+          pageInfo {
+            hasPreviousPage
+            hasNextPage
+            startCursor
+            endCursor
+          }
         }
       }`,
         variables: {
@@ -1500,8 +1502,10 @@ describe.each`
         const moviesConnection = result14.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
+
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(1);
@@ -1510,9 +1514,9 @@ describe.each`
           const edge0 = moviesConnection.edges[0];
           expect(edge0.cursor).toMatch(base64RegExpr);
           const row0 = edge0.node;
-          expect(row0._id).toBe(`MOVIE_${mediaFullPath}`);
-          expect(row0.title).toBe(title);
-          expect(row0.mediaFullPath).toBe(mediaFullPath);
+          expect(row0._id).toBe(`MOVIE_${mediaFullPath3}`);
+          expect(row0.title).toBe(title3);
+          expect(row0.mediaFullPath).toBe(mediaFullPath3);
         }
       }
 
@@ -1523,7 +1527,12 @@ describe.each`
             node { _id title mediaFullPath }
             cursor 
           }
-          totalCount
+          pageInfo {
+            hasPreviousPage
+            hasNextPage
+            startCursor
+            endCursor
+          }
         }
       }`,
         variables: {
@@ -1538,8 +1547,10 @@ describe.each`
         const moviesConnection = result15.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(0);
         expect(moviesConnection.edges).not.toBeNull();
+
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(0);
@@ -1568,7 +1579,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1582,7 +1592,6 @@ describe.each`
         const moviesConnection = result16.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -1627,7 +1636,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1641,7 +1649,6 @@ describe.each`
         const moviesConnection = result17.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -1686,7 +1693,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1701,7 +1707,6 @@ describe.each`
         const moviesConnection = result18.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -1739,7 +1744,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1753,7 +1757,6 @@ describe.each`
         const moviesConnection = result19.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -1791,7 +1794,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1806,7 +1808,6 @@ describe.each`
         const moviesConnection = result20.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -1844,7 +1845,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1859,7 +1859,6 @@ describe.each`
         const moviesConnection = result21.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -1897,7 +1896,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1912,7 +1910,6 @@ describe.each`
         const moviesConnection = result22.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -1943,7 +1940,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -1958,7 +1954,6 @@ describe.each`
         const moviesConnection = result23.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -1996,7 +1991,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -2011,7 +2005,6 @@ describe.each`
         const moviesConnection = result24.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -2049,7 +2042,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -2064,11 +2056,10 @@ describe.each`
         const moviesConnection = result25.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
-        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(4);
@@ -2116,7 +2107,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -2131,7 +2121,6 @@ describe.each`
         const moviesConnection = result26.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -2169,7 +2158,6 @@ describe.each`
             startCursor
             endCursor
           }
-          totalCount
         }
       }`,
         variables: {
@@ -2184,10 +2172,9 @@ describe.each`
         const moviesConnection = result27.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
-        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
         expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
@@ -2238,7 +2225,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2254,7 +2240,6 @@ describe.each`
         const moviesConnection = result28.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -2292,7 +2277,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2308,7 +2292,6 @@ describe.each`
         const moviesConnection = result29.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -2346,7 +2329,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2362,7 +2344,6 @@ describe.each`
         const moviesConnection = result30.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -2393,7 +2374,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2409,7 +2389,6 @@ describe.each`
         const moviesConnection = result31.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -2447,7 +2426,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2463,11 +2441,10 @@ describe.each`
         const moviesConnection = result32.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
-        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(3);
@@ -2508,7 +2485,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2524,11 +2500,10 @@ describe.each`
         const moviesConnection = result33.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
-        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(3);
@@ -2569,7 +2544,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2585,7 +2559,6 @@ describe.each`
         const moviesConnection = result34.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -2623,7 +2596,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2639,7 +2611,6 @@ describe.each`
         const moviesConnection = result35.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -2651,16 +2622,16 @@ describe.each`
           const edge0 = moviesConnection.edges[0];
           expect(edge0.cursor).toMatch(base64RegExpr);
           const row0 = edge0.node;
-          expect(row0._id).toBe(`MOVIE_${mediaFullPath5}`);
-          expect(row0.title).toBe(title5);
-          expect(row0.mediaFullPath).toBe(mediaFullPath5);
+          expect(row0._id).toBe(`MOVIE_${mediaFullPath4}`);
+          expect(row0.title).toBe(title4);
+          expect(row0.mediaFullPath).toBe(mediaFullPath4);
           //===
           const edge1 = moviesConnection.edges[1];
           expect(edge1.cursor).toMatch(base64RegExpr);
           const row1 = edge1.node;
-          expect(row1._id).toBe(`MOVIE_${mediaFullPath2}`);
-          expect(row1.title).toBe(title2);
-          expect(row1.mediaFullPath).toBe(mediaFullPath2);
+          expect(row1._id).toBe(`MOVIE_${mediaFullPath5}`);
+          expect(row1.title).toBe(title5);
+          expect(row1.mediaFullPath).toBe(mediaFullPath5);
         }
       }
 
@@ -2677,7 +2648,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2693,10 +2663,9 @@ describe.each`
         const moviesConnection = result36.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
-        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
         expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
 
         if (moviesConnection.edges) {
@@ -2705,16 +2674,16 @@ describe.each`
           const edge0 = moviesConnection.edges[0];
           expect(edge0.cursor).toMatch(base64RegExpr);
           const row0 = edge0.node;
-          expect(row0._id).toBe(`MOVIE_${mediaFullPath5}`);
-          expect(row0.title).toBe(title5);
-          expect(row0.mediaFullPath).toBe(mediaFullPath5);
+          expect(row0._id).toBe(`MOVIE_${mediaFullPath3}`);
+          expect(row0.title).toBe(title3);
+          expect(row0.mediaFullPath).toBe(mediaFullPath3);
           //===
           const edge1 = moviesConnection.edges[1];
           expect(edge1.cursor).toMatch(base64RegExpr);
           const row1 = edge1.node;
-          expect(row1._id).toBe(`MOVIE_${mediaFullPath2}`);
-          expect(row1.title).toBe(title2);
-          expect(row1.mediaFullPath).toBe(mediaFullPath2);
+          expect(row1._id).toBe(`MOVIE_${mediaFullPath4}`);
+          expect(row1.title).toBe(title4);
+          expect(row1.mediaFullPath).toBe(mediaFullPath4);
         }
       }
 
@@ -2731,7 +2700,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2747,10 +2715,9 @@ describe.each`
         const moviesConnection = result37.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
-        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
         expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
 
         if (moviesConnection.edges) {
@@ -2759,9 +2726,9 @@ describe.each`
           const edge0 = moviesConnection.edges[0];
           expect(edge0.cursor).toMatch(base64RegExpr);
           const row0 = edge0.node;
-          expect(row0._id).toBe(`MOVIE_${mediaFullPath5}`);
-          expect(row0.title).toBe(title5);
-          expect(row0.mediaFullPath).toBe(mediaFullPath5);
+          expect(row0._id).toBe(`MOVIE_${mediaFullPath3}`);
+          expect(row0.title).toBe(title3);
+          expect(row0.mediaFullPath).toBe(mediaFullPath3);
         }
       }
 
@@ -2778,7 +2745,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2794,7 +2760,6 @@ describe.each`
         const moviesConnection = result38.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -2832,7 +2797,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2848,10 +2812,9 @@ describe.each`
         const moviesConnection = result39.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
-        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
         expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
 
         if (moviesConnection.edges) {
@@ -2893,7 +2856,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2909,10 +2871,9 @@ describe.each`
         const moviesConnection = result40.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
-        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
         expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
 
         if (moviesConnection.edges) {
@@ -2954,7 +2915,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -2970,7 +2930,6 @@ describe.each`
         const moviesConnection = result41.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(0);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -2996,7 +2955,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3013,11 +2971,10 @@ describe.each`
         const moviesConnection = result42.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
-        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(3);
@@ -3058,7 +3015,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3075,11 +3031,10 @@ describe.each`
         const moviesConnection = result43.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
-        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(3);
@@ -3120,7 +3075,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3137,11 +3091,10 @@ describe.each`
         const moviesConnection = result44.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
-        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(2);
@@ -3175,7 +3128,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3192,11 +3144,10 @@ describe.each`
         const moviesConnection = result45.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
-        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(3);
@@ -3237,7 +3188,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3254,11 +3204,10 @@ describe.each`
         const moviesConnection = result46.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
-        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(3);
@@ -3299,7 +3248,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3316,11 +3264,10 @@ describe.each`
         const moviesConnection = result47.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
-        expect(moviesConnection.pageInfo.hasNextPage).toBe(true);
+        expect(moviesConnection.pageInfo.hasNextPage).toBe(false);
 
         if (moviesConnection.edges) {
           expect(moviesConnection.edges.length).toBe(2);
@@ -3354,7 +3301,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3371,7 +3317,6 @@ describe.each`
         const moviesConnection = result48.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -3409,7 +3354,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3426,7 +3370,6 @@ describe.each`
         const moviesConnection = result49.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -3464,7 +3407,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3481,7 +3423,6 @@ describe.each`
         const moviesConnection = result50.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
@@ -3519,7 +3460,6 @@ describe.each`
           startCursor
           endCursor
         }
-        totalCount
       }
     }`,
         variables: {
@@ -3536,7 +3476,6 @@ describe.each`
         const moviesConnection = result51.data["movies"] as IConnection<
           Partial<IMovie>
         >;
-        expect(moviesConnection.totalCount).toBe(5);
         expect(moviesConnection.edges).not.toBeNull();
 
         expect(moviesConnection.pageInfo.hasPreviousPage).toBe(true);
