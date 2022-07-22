@@ -54,6 +54,12 @@ export class DBTablePlayListInfo extends DBTable {
                 `ON ${useIndexTableSchema ? this.getExtendedName() : this.name} (type, name)`;
 
             aSqlText.push(sqlIndexText);
+            //==
+            const indexName2 = 'PLAYLISTINFO_NAME_ID_INDEX';
+            const sqlIndexText2 = `CREATE INDEX IF NOT EXISTS ${useIndexSchema ? this.getExtendedName(indexName2) : indexName2} ` +
+                `ON ${useIndexTableSchema ? this.getExtendedName() : this.name} (name, _id)`;
+
+            aSqlText.push(sqlIndexText2);
         }
 
         return aSqlText;

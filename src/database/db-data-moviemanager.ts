@@ -869,14 +869,25 @@ export abstract class DBDataMovieManager extends DBData {
     tid: number | undefined,
     gid: number | undefined,
     ex_column_names?: string[] | undefined,
-    limit?: number,
-    offset?: number
+    first?: number | undefined,
+    after?: Record<string, unknown> | undefined,
+    last?: number | undefined,
+    before?: Record<string, unknown> | undefined,
+    offset?: number | undefined
   ): Promise<IGetRowsFunReturn> {
     this._throwIfNotReady();
 
-    const paging =
-      typeof limit !== "undefined" && typeof offset !== "undefined";
-    if (paging) gid = undefined;
+    if (gid !== undefined) {
+      first = undefined;
+      after = undefined;
+      last = undefined;
+      before = undefined;
+      offset = undefined;
+    }
+
+    // const paging =
+    //   typeof limit !== "undefined" && typeof offset !== "undefined";
+    // if (paging) gid = undefined;
 
     await this.beginTransaction();
 
@@ -915,10 +926,21 @@ export abstract class DBDataMovieManager extends DBData {
         `${playlistinfo_tab}.name`,
         `${moviegrouptypemoviegroup_tab}.gendid`,
       ];
+
+      const searchParans = this._findSearchParams(
+        ["name", "_id"],
+        first,
+        after,
+        last,
+        before,
+        offset
+      );
       this._appendExColumnNames(
         column_names,
         playlistinfo_tab,
-        ex_column_names
+        ex_column_names !== undefined
+        ? ex_column_names.concat(searchParans.indexFields)
+        : searchParans.indexFields
       );
       const cond_col_names =
         typeof gid !== "undefined"
@@ -936,22 +958,32 @@ export abstract class DBDataMovieManager extends DBData {
         `${playlistinfo_tab}._id = ${moviegrouptypemoviegroup_tab}.mgid`,
       ];
       const extra_conds: string[] = [];
-      const order_col_names = [`name`];
 
-      const rows = await this.getRowsCore(
+      extra_conds.push(...searchParans.whereConds);
+
+      const order_col_names = searchParans.orderByCols;
+
+      let rows = await this.getRowsCore(
         table_names,
         column_names,
         cond_col_names,
         cond_col_values,
         join_conds,
         extra_conds,
-        undefined,
+        searchParans.whereParams,
         order_col_names,
         " LEFT JOIN ",
-        limit,
-        offset
+        searchParans.limit,
+        searchParans.offset
       );
 
+      ({ rows, offset } = this._adjustRowsOffset(
+        rows,
+        searchParans.reversedOrder,
+        last,
+        offset
+      ));
+  
       if (typeof gid !== "undefined") {
         if (rows.length !== 1)
           throw new MissingGroupError(`Missing group: ${gid}`);
@@ -973,8 +1005,8 @@ export abstract class DBDataMovieManager extends DBData {
         foreign_id_name: `gendid`,
         rows,
         ...total_count_property,
-        reversedOrder: false,
-        offset: undefined,
+        reversedOrder: searchParans.reversedOrder,
+        offset,
       };
     } catch (e) {
       //console.log(`$$ e.message = ${e.message}`)
@@ -1437,7 +1469,7 @@ export abstract class DBDataMovieManager extends DBData {
 
     if (after && before) {
       beforeIsInside = false;
-      
+
       for (let i = 0; i < indexFields.length; i++) {
         const key = indexFields[i];
 
@@ -1454,27 +1486,21 @@ export abstract class DBDataMovieManager extends DBData {
           if ((before[key] as number) > (after[key] as number)) {
             beforeIsInside = true;
             break;
-          } else if (
-            ((before[key] as number) < (after[key] as number))
-          ) {
+          } else if ((before[key] as number) < (after[key] as number)) {
             break;
           }
         } else if (typeof before[key] === "bigint") {
           if ((before[key] as bigint) > (after[key] as bigint)) {
             beforeIsInside = true;
             break;
-          } else if (
-            ((before[key] as bigint) < (after[key] as bigint))
-          ) {
+          } else if ((before[key] as bigint) < (after[key] as bigint)) {
             break;
           }
         } else if (typeof before[key] === "boolean") {
           if ((before[key] as boolean) > (after[key] as boolean)) {
             beforeIsInside = true;
             break;
-          } else if (
-            ((before[key] as boolean) < (after[key] as boolean))
-          ) {
+          } else if ((before[key] as boolean) < (after[key] as boolean)) {
             break;
           }
         }
@@ -1538,7 +1564,6 @@ export abstract class DBDataMovieManager extends DBData {
     gid: number | undefined,
     mid: string | undefined,
     ex_column_names?: string[] | undefined,
-    // limit?: number,
     first?: number | undefined,
     after?: Record<string, unknown> | undefined,
     last?: number | undefined,
