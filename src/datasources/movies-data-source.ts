@@ -155,8 +155,11 @@ export class MoviesDataSource extends SQLDataSource {
     tid: number | undefined,
     gid: number | undefined,
     ex_column_names?: string[] | undefined,
-    limit?: number,
-    offset?: number
+    first?: number | undefined,
+    after?: Record<string, unknown> | undefined,
+    last?: number | undefined,
+    before?: Record<string, unknown> | undefined,
+    offset?: number | undefined
   ): Promise<IGetRowsFunReturn> {
     return this._callWrapper(
       this._dbDataMovieManager.getMovieGroups.bind(
@@ -165,7 +168,10 @@ export class MoviesDataSource extends SQLDataSource {
       tid,
       gid,
       ex_column_names,
-      limit,
+      first,
+      after,
+      last,
+      before,
       offset
     );
   }

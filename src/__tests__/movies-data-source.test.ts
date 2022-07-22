@@ -1796,7 +1796,10 @@ describe.each`
         undefined,
         undefined,
         5,
-        0
+        undefined,
+        undefined,
+        undefined,
+        undefined
       );
       expect(result1.rows.length).toBe(5);
       expect(result1.rows[0][convertReportedColumnName("_id")]).toBe(gid);
@@ -1832,6 +1835,9 @@ describe.each`
         undefined,
         undefined,
         5,
+        undefined,
+        undefined,
+        undefined,
         1
       );
       expect(result2.rows.length).toBe(5);
@@ -1868,6 +1874,9 @@ describe.each`
         undefined,
         undefined,
         5,
+        undefined,
+        undefined,
+        undefined,
         2
       );
       expect(result3.rows.length).toBe(4);
@@ -1899,7 +1908,10 @@ describe.each`
         undefined,
         undefined,
         6,
-        0
+        undefined,
+        undefined,
+        undefined,
+        undefined
       );
       expect(result4.rows.length).toBe(6);
       expect(result4.rows[0][convertReportedColumnName("_id")]).toBe(gid);
@@ -1940,7 +1952,10 @@ describe.each`
         undefined,
         undefined,
         2,
-        0
+        undefined,
+        undefined,
+        undefined,
+        undefined
       );
       expect(result5.rows.length).toBe(2);
       expect(result5.rows[0][convertReportedColumnName("_id")]).toBe(gid);
@@ -1961,7 +1976,10 @@ describe.each`
         undefined,
         undefined,
         2,
-        0
+        undefined,
+        undefined,
+        undefined,
+        undefined
       );
       expect(result6.rows.length).toBe(2);
       expect(result6.rows[0][convertReportedColumnName("_id")]).toBe(gid5);
@@ -1982,7 +2000,10 @@ describe.each`
         undefined,
         undefined,
         2,
-        0
+        undefined,
+        undefined,
+        undefined,
+        undefined
       );
       expect(result7.rows.length).toBe(1);
       expect(result7.rows[0][convertReportedColumnName("_id")]).toBe(gid6);

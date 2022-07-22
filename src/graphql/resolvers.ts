@@ -9,22 +9,22 @@ import {
   // translateConnectionArgs,
 } from "./connection";
 
-// export interface IPlayItemInfo {
-//   id: number;
-//   type: number;
-//   playlistID: number;
-//   mediaTitle: string;
-//   mediaID: string;
-//   listOrder: number;
-// }
-
 export enum Visibility {
   INVISIBLE = 0,
   VISIBLE = 1,
 }
 
-interface IMovieGroup {
-  dummyxx: number;
+export interface IMovieGroup {
+  _id: string;
+  type: number;
+  name: string;
+  addDate: string;
+  mediaDate: string;
+  modifyDate: string;
+  place: string;
+  description: string;
+  visible: Visibility;
+  custom: string;
 }
 
 export interface IMovie {
@@ -101,6 +101,18 @@ const movie_ex_column_names = [
   "playDate",
   "studio",
   "protected",
+];
+
+const movie_group_ex_column_names = [
+  `type`,
+  `name`,
+  `addDate`,
+  `mediaDate`,
+  `modifyDate`,
+  `place`,
+  `description`,
+  `visible`,
+  `custom`,
 ];
 
 interface IArrayParams {
@@ -209,6 +221,19 @@ const movies_fields_trans_data = _createTranslateData([
   "protected",
 ]);
 
+const movie_groups_fields_trans_data = _createTranslateData([
+  `_id`,
+  `type`,
+  `name`,
+  `addDate`,
+  `mediaDate`,
+  `modifyDate`,
+  `place`,
+  `description`,
+  `visible`,
+  `custom`,
+]);
+
 export const resolvers = {
   Visibility: {
     INVISIBLE: Visibility.INVISIBLE,
@@ -229,16 +254,6 @@ export const resolvers = {
       { first, after, last, before, offset }: IConnectionArgs,
       context: IContext
     ): Promise<IConnectionResolver<Partial<IMovie>>> => {
-      // const { limit, offset: offset2 } = translateConnectionArgs(
-      //   first,
-      //   after,
-      //   last,
-      //   before,
-      //   offset
-      // );
-
-      // let startOffset = offset2 !== undefined ? offset2 : 0;
-
       const response = await context.dataSources.moviesDataSource.getMovies(
         undefined,
         undefined,
@@ -247,21 +262,18 @@ export const resolvers = {
         after !== undefined ? decodeCursor(after) : undefined,
         last,
         before !== undefined ? decodeCursor(before) : undefined,
-        offset,
+        offset
       );
-
-      // special handling when it is unknown what rows are the last ones
-      // if (last !== undefined) {
-      //   if (last < response.rows.length) {
-      //     startOffset += response.rows.length - last;
-      //     response.rows = response.rows.slice(-last);
-      //   }
-      // }
 
       _transform2ValidFields(response.rows, movies_fields_trans_data);
 
       // translate "response.rows" to "edges"
-      return buildConnectionResponse(response, after !== undefined, before !== undefined, ["_id", "title"]);
+      return buildConnectionResponse(
+        response,
+        after !== undefined,
+        before !== undefined,
+        ["_id", "title"]
+      );
     },
     movie: async (parent: unknown, { _id }: IIDArgs, context: IContext) => {
       const response = await context.dataSources.moviesDataSource.getMovies(
@@ -273,11 +285,41 @@ export const resolvers = {
       _transform2ValidFields(response.rows, movies_fields_trans_data);
       return response.rows.length === 1 ? response.rows[0] : null;
     },
-    movieGroups: (parent: unknown) => {
-      // TODO:
+    movieGroups: async (
+      parent: unknown,
+      { first, after, last, before, offset }: IConnectionArgs,
+      context: IContext
+    ): Promise<IConnectionResolver<Partial<IMovieGroup>>> => {
+      const response = await context.dataSources.moviesDataSource.getMovieGroups(
+        undefined,
+        undefined,
+        movie_group_ex_column_names,
+        first,
+        after !== undefined ? decodeCursor(after) : undefined,
+        last,
+        before !== undefined ? decodeCursor(before) : undefined,
+        offset
+      );
+
+      _transform2ValidFields(response.rows, movie_groups_fields_trans_data);
+
+      // translate "response.rows" to "edges"
+      return buildConnectionResponse(
+        response,
+        after !== undefined,
+        before !== undefined,
+        ["_id", "name"]
+      );
     },
-    movieGroup: (parent: unknown, { _id }: IIDArgs) => {
-      // TODO:
+    movieGroup: async (parent: unknown, { _id }: IIDArgs, context: IContext) => {
+      const response = await context.dataSources.moviesDataSource.getMovieGroups(
+        undefined,
+        parseInt(_id),
+        movie_group_ex_column_names
+      );
+
+      _transform2ValidFields(response.rows, movie_groups_fields_trans_data);
+      return response.rows.length === 1 ? response.rows[0] : null;
     },
     groupTypes: (parent: unknown) => {
       // TODO:
@@ -288,12 +330,18 @@ export const resolvers = {
   },
 
   Mutation: {
+    // movies
     addMovie: async (
       parent: unknown,
-      { movieInfo }: { movieInfo: Record<string, unknown> },
+      {
+        mediaFullPath,
+        movieInfo,
+      }: { mediaFullPath: string; movieInfo: Record<string, unknown> },
       context: IContext
     ): Promise<string> => {
       const { column_names, column_values } = _objParams2ArrayParams(movieInfo);
+      column_names.unshift("mediaFullPath");
+      column_values.unshift(mediaFullPath);
 
       return await context.dataSources.moviesDataSource.addMovie(
         undefined,
@@ -309,21 +357,83 @@ export const resolvers = {
     ): Promise<boolean> => {
       const { column_names, column_values } = _objParams2ArrayParams(movieInfo);
 
-      await context.dataSources.moviesDataSource.updateMovie(
-        _id,
-        column_names,
-        column_values
-      );
+      try {
+        await context.dataSources.moviesDataSource.updateMovie(
+          _id,
+          column_names,
+          column_values
+        );
 
-      return true;
+        return true;
+      } catch (e) {
+        return false;
+      }
     },
     deleteMovie: async (
       parent: unknown,
       { _id }: { _id: string },
       context: IContext
     ): Promise<boolean> => {
-      await context.dataSources.moviesDataSource.deleteMovie(_id);
-      return true;
+      try {
+        await context.dataSources.moviesDataSource.deleteMovie(_id);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+    // moviegroup
+    addMovieGroup: async (
+      parent: unknown,
+      { movieGroupInfo }: { movieGroupInfo: Record<string, unknown> },
+      context: IContext
+    ): Promise<number> => {
+      const { column_names, column_values } =
+        _objParams2ArrayParams(movieGroupInfo);
+
+      return await context.dataSources.moviesDataSource.addMovieGroup(
+        undefined,
+        undefined,
+        column_names,
+        column_values
+      );
+    },
+    // updateMovieGroup(_id: ID!, movieGroupInfo: MovieGroupInfoInput!): Boolean!
+    updateMovieGroup: async (
+      parent: unknown,
+      {
+        _id,
+        movieGroupInfo,
+      }: { _id: number; movieGroupInfo: Record<string, unknown> },
+      context: IContext
+    ): Promise<boolean> => {
+      const { column_names, column_values } =
+        _objParams2ArrayParams(movieGroupInfo);
+
+      try {
+        await context.dataSources.moviesDataSource.updateMovieGroup(
+          _id,
+          column_names,
+          column_values
+        );
+
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+    // deleteMovieGroup(_id: ID!): Boolean!
+    deleteMovieGroup: async (
+      parent: unknown,
+      { _id }: { _id: number },
+      context: IContext
+    ): Promise<boolean> => {
+      try {
+        await context.dataSources.moviesDataSource.deleteMovieGroup(_id);
+
+        return true;
+      } catch (e) {
+        return false;
+      }
     },
   },
 };

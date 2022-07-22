@@ -86,30 +86,19 @@ export const typeDefs = gql`
     movies: [PositionedMovie!]!
   }
 
-  # type MovieEdge {
-  #   node: Movie!
-  #   cursor: String!
-  #   # here can come additional fields
-  # }
-
-  # type MoviesConnection {
-  #   edges: [MovieEdge]
-  #   pageInfo: PageInfo!
-  # }
-
   ${buildCoonectionEdgeTypes("Movies", "Movie", "Movie")}
+  ${buildCoonectionEdgeTypes("MovieGroups", "MovieGroup", "MovieGroup")}
  
   type Query {
     movies(first: Int, after: String, last: Int, before: String, offset: Int): MoviesConnection!
     movie(_id: ID!): Movie
-    movieGroups: [MovieGroup!]!
+    movieGroups(first: Int, after: String, last: Int, before: String, offset: Int): MovieGroupsConnection!
     movieGroup(_id: ID!): MovieGroup
-    groupTypes: [GroupType!]!
+    groupTypes(first: Int, after: String, last: Int, before: String, offset: Int): [GroupType!]!
     groupType(_id: ID!): GroupType
   }
 
-  input AddMovieInfo {
-    mediaFullPath: String!
+  input MovieInfoInput {
     title: String
     description: String
     genre: String
@@ -138,44 +127,29 @@ export const typeDefs = gql`
     playDate: String
     studio: String
     protected: Boolean  
-  }
+  } 
 
-  input UpdateMovieInfo {
-    mediaFullPath: String
-    title: String
-    description: String
-    genre: String
-    length: BigIntInput                      
-    mediaType: Int
-    mediaDuration: BigIntInput
-    mediaSize: BigIntInput
-    mediaRating: Int
-    mediaResume: BigIntInput
-    resolutionX: Int
-    resolutionY: Int
-    aspectRatioX: Int
-    aspectRatioY: Int
-    thumbnailResolutionX: Int
-    thumbnailResolutionY: Int
-    playCount: Int
-    stereoType: String
-    infoFilePath: String
-    isMovieFolder: Boolean
-    visible: Visibility
-    orientation: Int
-    onlineInfoVisible: Int
-    releaseDate: String
+  input MovieGroupInfoInput {
+    type: Int
+    name: String
     addDate: String
+    mediaDate: String
     modifyDate: String
-    playDate: String
-    studio: String
-    protected: Boolean  
+    place: String
+    description: String
+    visible: Visibility
+    custom: String
   }
 
   type Mutation {
-    addMovie(movieInfo: AddMovieInfo!): ID!
-    updateMovie(_id: ID!, movieInfo: UpdateMovieInfo!): Boolean!
+    # movies
+    addMovie(mediaFullPath: String!, movieInfo: MovieInfoInput!): ID!
+    updateMovie(_id: ID!, movieInfo: MovieInfoInput!): Boolean!
     deleteMovie(_id: ID!): Boolean!
+    # movie groups
+    addMovieGroup(movieGroupInfo: MovieGroupInfoInput!): ID!
+    updateMovieGroup(_id: ID!, movieGroupInfo: MovieGroupInfoInput!): Boolean!
+    deleteMovieGroup(_id: ID!): Boolean!
   }
 `;
 
