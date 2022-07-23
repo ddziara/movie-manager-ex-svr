@@ -2,6 +2,7 @@ import { ApolloServer } from "apollo-server-express";
 import { typeDefs } from "../graphql/defs";
 import {
   IDataSources,
+  IGroupType,
   IMovie,
   IMovieGroup,
   resolvers,
@@ -201,7 +202,6 @@ const _getGraphQLPagingParams = (
   return { variables, params, variablesObj };
 };
 
-//   ${"postgres"}
 describe.each`
   appPlatform
   ${"cyberlink"}
@@ -1537,6 +1537,466 @@ describe.each`
         }
       });
     });
+
+    describe("Testing group types queries/mutations/subscriptions", () => {
+      const name = `IMDB Genre`;
+      const description = `Genre in IMDB database`;
+      //==
+      const name2 = `Director`;
+      const description2 = `Director of a movie`;
+      //==
+      let result: GraphQLResponse;
+      let result7: GraphQLResponse;
+
+      beforeAll(async () => {
+        await _initData();
+      });
+      afterAll(async () => {
+        await _uninitData();
+      });
+      test("Adding a group type", async () => {
+        result = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String!, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name, description },
+        });
+
+        expect(result.errors).toBeUndefined();
+
+        if (result.data) {
+          expect(parseInt(result.data.addGroupType)).toBeGreaterThanOrEqual(1);
+        }
+      });
+      test("Getting all group types", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "query GetGroupTypes { groupTypes { edges { node { _id name description } } } }",
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const moviesConnection = result2.data["groupTypes"] as IConnection<
+            Partial<IGroupType>
+          >;
+          expect(moviesConnection.edges).not.toBeNull();
+
+          if (moviesConnection.edges) {
+            const row0 = moviesConnection.edges[0].node;
+            if (row0._id !== undefined) {
+              expect(parseInt(row0._id)).toBeGreaterThanOrEqual(1);
+            }
+            expect(row0.name).toBe(name);
+            expect(row0.description).toBe(description);
+          }
+        }
+      });
+      test("Getting given group type", async () => {
+        const result3 = await testServer.executeOperation({
+          query:
+            "query GetGroupType($_id: ID!) { groupType(_id: $_id) { _id name description } }",
+          variables: { _id: result.data?.addGroupType },
+        });
+
+        expect(result3.data).toBeTruthy();
+
+        if (result3.data) {
+          const row = result3.data["groupType"];
+          expect(parseInt(row["_id"])).toBeGreaterThanOrEqual(1);
+          expect(row["name"]).toBe(name);
+          expect(row["description"]).toBe(description);
+        }
+      });
+      test("Getting non-existing group type", async () => {
+        const result4 = await testServer.executeOperation({
+          query:
+            "query GetGroupType($_id: ID!) { groupType(_id: $_id) { _id name description } }",
+          variables: { _id: "non-existing" },
+        });
+
+        expect(result4.data).toBeTruthy();
+
+        if (result4.data) {
+          expect(result4.data["groupType"]).toBeNull();
+        }
+      });
+      test("Updating given group type", async () => {
+        const result5 = await testServer.executeOperation({
+          query: `mutation UpdateGroupType($_id: ID!, $description: String, $name: String ) {
+          updateGroupType(_id: $_id, groupTypeInfo: {
+            description: $description, name: $name
+          }
+        )
+      }`,
+          variables: {
+            _id: result.data?.addGroupType,
+            name,
+            description,
+          },
+        });
+
+        expect(result5.errors).toBeUndefined();
+      });
+      test("Getting given group type", async () => {
+        const result6 = await testServer.executeOperation({
+          query: `query GetGroupType($_id: ID!) { groupType(_id: $_id) { name description } }`,
+          variables: { _id: result.data?.addGroupType },
+        });
+
+        expect(result6.data).toBeTruthy();
+
+        if (result6.data) {
+          const row = result6.data["groupType"];
+          expect(row["name"]).toBe(name);
+          expect(row["description"]).toBe(description);
+        }
+      });
+      test("Adding a group type", async () => {
+        result7 = await testServer.executeOperation({
+          query: `mutation CreateGroupType($name: String, $description: String) {
+          addGroupType(groupTypeInfo: {
+            name: $name, description: $description
+          }
+        )
+      }`,
+          variables: {
+            name: name2,
+            description: description2,
+          },
+        });
+
+        expect(result7.errors).toBeUndefined();
+      });
+      test("Getting given group type", async () => {
+        const result8 = await testServer.executeOperation({
+          query: `query GetGroupType($_id: ID!) { groupType(_id: $_id) { _id name description } }`,
+          variables: { _id: result7.data?.addGroupType },
+        });
+
+        expect(result8.data).toBeTruthy();
+
+        if (result8.data) {
+          const row = result8.data["groupType"];
+          expect(row["name"]).toBe(name2);
+          expect(row["description"]).toBe(description2);
+        }
+      });
+      test("Deleting given group type", async () => {
+        const result9 = await testServer.executeOperation({
+          query: `mutation RemoveGroupType($_id: ID!) {
+          deleteGroupType(_id: $_id)
+      }`,
+          variables: { _id: result.data?.addGroupType },
+        });
+
+        expect(result9.errors).toBeUndefined();
+      });
+      test("Getting given group type", async () => {
+        const result10 = await testServer.executeOperation({
+          query:
+            "query GetGroupType($_id: ID!) { groupType(_id: $_id) { _id name description } }",
+          variables: { _id: result.data?.addGroupType },
+        });
+
+        expect(result10.data).toBeTruthy();
+
+        if (result10.data) {
+          const row = result10.data["groupType"];
+          expect(row).toBe(null);
+        }
+      });
+    });
+
+    describe("Testing group types paging", () => {
+      const name = `IMDB Genre`;
+      const description = `Genre in IMDB database`;
+      //==
+      const name2 = `Director`;
+      const description2 = `Director of a movie`;
+      //==
+      const name3 = `Serie`;
+      const description3 = `Like Mandalorian or The Witcher`;
+      //==
+      const name4 = `Franchise`;
+      const description4 = `Like Star Wars or Friday the 13th`;
+      //==
+      const name5 = `Writer`;
+      const description5 = `Writer who's a novel or short story was made into a movie`;
+      //==
+      const results: GraphQLResponse[] = [];
+
+      beforeAll(async () => {
+        await _initData();
+      });
+      afterAll(async () => {
+        await _initData();
+      });
+      test("Adding a group type", async () => {
+        const result = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name, description },
+        });
+
+        expect(result.errors).toBeUndefined();
+
+        if (result.data) {
+          expect(parseInt(result.data.addGroupType)).toBeGreaterThanOrEqual(1);
+        }
+      });
+      test("Adding a group type", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name: name2, description: description2 },
+        });
+
+        expect(result2.errors).toBeUndefined();
+
+        if (result2.data) {
+          expect(parseInt(result2.data.addGroupType)).toBeGreaterThanOrEqual(
+            1
+          );
+        }
+      });
+      test("Adding a group type", async () => {
+        const result3 = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name: name3, description: description3 },
+        });
+
+        expect(result3.errors).toBeUndefined();
+
+        if (result3.data) {
+          expect(parseInt(result3.data.addGroupType)).toBeGreaterThanOrEqual(
+            1
+          );
+        }
+      });
+      test("Adding a group type", async () => {
+        const result4 = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name: name4, description: description4 },
+        });
+
+        expect(result4.errors).toBeUndefined();
+
+        if (result4.data) {
+          expect(parseInt(result4.data.addGroupType)).toBeGreaterThanOrEqual(
+            1
+          );
+        }
+      });
+      test("Adding a group type", async () => {
+        const result5 = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name: name5, description: description5 },
+        });
+
+        expect(result5.errors).toBeUndefined();
+
+        if (result5.data) {
+          expect(parseInt(result5.data.addGroupType)).toBeGreaterThanOrEqual(
+            1
+          );
+        }
+      });
+
+      describe.each`
+        first        | afterInfo                                                           | last         | beforeInfo                                                          | offset       | expPrevPage | expNextPage | expData
+        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[name2, description2], [name4, description4], [name, description], [name3, description3], [name5, description5]]}
+        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[name2, description2], [name4, description4]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[name, description], [name3, description3]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[name5, description5]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -2 }}             | ${undefined} | ${true}     | ${true}     | ${[[name, description], [name3, description3]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[name2, description2], [name4, description4]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${false}    | ${[]}
+        ${7}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[name2, description2], [name4, description4], [name, description], [name3, description3], [name5, description5]]}
+        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${false}    | ${[[name4, description4], [name, description], [name3, description3], [name5, description5]]}
+        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[name2, description2]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -2 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[name3, description3], [name5, description5]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[name3, description3], [name5, description5]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${2}         | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${3}         | ${false}    | ${true}     | ${[[name2, description2], [name4, description4]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${4}         | ${false}    | ${true}     | ${[[name2, description2]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${5}         | ${false}    | ${false}    | ${[]}
+        ${3}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[name2, description2], [name4, description4], [name, description]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 1 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[name, description], [name3, description3], [name5, description5]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[name3, description3], [name5, description5]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name, description], [name3, description3]]}
+        ${2}         | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[name2, description2], [name4, description4]]}
+        ${2}         | ${undefined}                                                        | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[name4, description4]]}
+        ${2}         | ${undefined}                                                        | ${3}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[name2, description2], [name4, description4]]}
+        ${2}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[name2, description2], [name4, description4]]}
+        ${5}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[[name2, description2], [name4, description4], [name, description], [name3, description3]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[name3, description3], [name5, description5]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${5}         | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[name4, description4], [name, description], [name3, description3], [name5, description5]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[name, description]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[name4, description4], [name, description], [name3, description3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${3}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${2}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[name2, description2], [name4, description4]]}
+        ${1}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[name2, description2]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name, description], [name3, description3]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[name4, description4], [name, description], [name3, description3]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[name4, description4], [name, description], [name3, description3]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[]}
+        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[name4, description4], [name, description], [name3, description3]]}
+        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[name4, description4], [name, description], [name3, description3]]}
+        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[name, description], [name3, description3]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[name4, description4], [name, description], [name3, description3]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[name4, description4], [name, description], [name3, description3]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[name, description], [name3, description3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name, description]]}
+            `(
+        "Getting group types (first=$first, afer=$afterInfo, last=$last, before=$beforeInfo, offset=$offset)",
+        ({
+          first,
+          afterInfo,
+          last,
+          beforeInfo,
+          offset,
+          expPrevPage,
+          expNextPage,
+          expData,
+        }: IPagingInfo) => {
+          test("", async () => {
+            const { variables, params, variablesObj } = _getGraphQLPagingParams(
+              first,
+              afterInfo,
+              last,
+              beforeInfo,
+              offset,
+              results,
+              "groupTypes"
+            );
+
+            const result = await testServer.executeOperation({
+              query: `query GetGroupTypes${variables} { groupTypes${params} {
+          edges {
+            node { _id name description }
+            cursor
+          }
+          pageInfo {
+            hasPreviousPage
+            hasNextPage
+            startCursor
+            endCursor
+          }
+        }
+      }`,
+              ...variablesObj,
+            });
+
+            results.push(result);
+
+            expect(result.data).toBeTruthy();
+
+            if (result.data) {
+              const groupTypesConnection = result.data[
+                "groupTypes"
+              ] as IConnection<Partial<IGroupType>>;
+              expect(groupTypesConnection.edges).not.toBeNull();
+
+              expect(groupTypesConnection.pageInfo.hasPreviousPage).toBe(
+                expPrevPage
+              );
+              expect(groupTypesConnection.pageInfo.hasNextPage).toBe(expNextPage);
+
+              const edges = groupTypesConnection.edges;
+
+              if (edges) {
+                expect(edges.length).toBe(expData.length);
+                //===
+                for (let i = 0; i < edges.length; i++) {
+                  const edge = edges[i];
+                  expect(edge.cursor).toMatch(base64RegExpr);
+                  const row = edge.node;
+                  expect(
+                    row._id !== undefined ? parseInt(row._id) : undefined
+                  ).toBeGreaterThanOrEqual(1);
+
+                  expect(row.name).toBe(expData[i][0]);
+                  expect(row.description).toBe(expData[i][1]);
+                }
+                //===
+                if (edges.length > 0) {
+                  expect(groupTypesConnection.pageInfo.startCursor).toBe(
+                    edges[0].cursor
+                  );
+                  expect(groupTypesConnection.pageInfo.endCursor).toBe(
+                    edges[edges.length - 1].cursor
+                  );
+                }
+              }
+            }
+          });
+        }
+      );
+
+      test("Querying directly about nodes", async () => {
+        const result52 = await testServer.executeOperation({
+          query: `query GetGroupTypes { groupTypes {
+            nodes {
+              _id name description
+            }
+            pageInfo {
+              hasPreviousPage
+              hasNextPage
+              startCursor
+              endCursor
+            }
+          }
+        }`,
+        });
+
+        expect(result52.data).toBeTruthy();
+
+        if (result52.data) {
+          const groupTypesConnection = result52.data[
+            "groupTypes"
+          ] as IConnection<Partial<IMovieGroup>>;
+          expect(groupTypesConnection.nodes).not.toBeNull();
+
+          expect(groupTypesConnection.pageInfo.hasPreviousPage).toBe(false);
+          expect(groupTypesConnection.pageInfo.hasNextPage).toBe(false);
+
+          if (groupTypesConnection.nodes) {
+            const node0 = groupTypesConnection.nodes[0];
+            expect(node0.name).toBe(name2);
+            expect(node0.description).toBe(description2);
+            //===
+            const node1 = groupTypesConnection.nodes[1];
+            expect(node1.name).toBe(name4);
+            expect(node1.description).toBe(description4);
+            //===
+            const node2 = groupTypesConnection.nodes[2];
+            expect(node2.name).toBe(name);
+            expect(node2.description).toBe(description);
+            //===
+            const node3 = groupTypesConnection.nodes[3];
+            expect(node3.name).toBe(name3);
+            expect(node3.description).toBe(description3);
+            //===
+            const node4 = groupTypesConnection.nodes[4];
+            expect(node4.name).toBe(name5);
+            expect(node4.description).toBe(description5);
+          }
+        }
+      });
+    });
+
     /*
 test("", async () => {
 });

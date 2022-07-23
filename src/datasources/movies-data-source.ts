@@ -101,15 +101,23 @@ export class MoviesDataSource extends SQLDataSource {
 
   async getMovieGroupTypes(
     tid: number | undefined,
-    limit?: number,
-    offset?: number
+    ex_column_names?: string[] | undefined,
+    first?: number | undefined,
+    after?: Record<string, unknown> | undefined,
+    last?: number | undefined,
+    before?: Record<string, unknown> | undefined,
+    offset?: number | undefined
   ): Promise<IGetRowsFunReturn> {
     return this._callWrapper(
       this._dbDataMovieManager.getMovieGroupTypes.bind(
         this._dbDataMovieManager
       ) as IParamFun<Promise<IGetRowsFunReturn>>,
       tid,
-      limit,
+      ex_column_names,
+      first,
+      after,
+      last,
+      before,
       offset
     );
   }
