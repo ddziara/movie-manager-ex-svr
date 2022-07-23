@@ -11,7 +11,7 @@ type PageInfo {
 
 export const getEdgeType = (edgeTypePrefix: string) => `${edgeTypePrefix}Edge`;
 
-export const buildCoonectionEdgeTypes = (connectionTypePrefix: string, edgeTypePrefix: string, nodeType: string) => `
+export const buildConnectionEdgeTypes = (connectionTypePrefix: string, edgeTypePrefix: string, nodeType: string) => `
 type ${edgeTypePrefix}Edge {
     node: ${nodeType}!
     cursor: String!

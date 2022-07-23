@@ -2219,7 +2219,7 @@ describe.each`
 
       //========================================================================================================
       // Note: rows are ordered alphabetically
-      const result = await moviesDataSource.getMovieGroupTypes(undefined, 2, 0);
+      const result = await moviesDataSource.getMovieGroupTypes(undefined, undefined, 2, undefined, undefined, undefined, 0);
       expect(result.rows.length).toBe(2);
       expect(result.rows[0][convertReportedColumnName("_id")]).toBe(tid);
       expect(result.rows[0][convertReportedColumnName("name")]).toBe(

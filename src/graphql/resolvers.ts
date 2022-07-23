@@ -14,6 +14,12 @@ export enum Visibility {
   VISIBLE = 1,
 }
 
+export interface IGroupType {
+  _id: string;
+  name: string;
+  description: string;
+}
+
 export interface IMovieGroup {
   _id: string;
   type: number;
@@ -114,6 +120,8 @@ const movie_group_ex_column_names = [
   `visible`,
   `custom`,
 ];
+
+const group_type_ex_column_names = [`name`];
 
 interface IArrayParams {
   column_names: string[];
@@ -221,7 +229,7 @@ const movies_fields_trans_data = _createTranslateData([
   "protected",
 ]);
 
-const movie_groups_fields_trans_data = _createTranslateData([
+const groups_fields_trans_data = _createTranslateData([
   `_id`,
   `type`,
   `name`,
@@ -232,6 +240,12 @@ const movie_groups_fields_trans_data = _createTranslateData([
   `description`,
   `visible`,
   `custom`,
+]);
+
+const movie_group_types_fields_trans_data = _createTranslateData([
+  `_id`,
+  `name`,
+  `description`,
 ]);
 
 export const resolvers = {
@@ -290,18 +304,19 @@ export const resolvers = {
       { first, after, last, before, offset }: IConnectionArgs,
       context: IContext
     ): Promise<IConnectionResolver<Partial<IMovieGroup>>> => {
-      const response = await context.dataSources.moviesDataSource.getMovieGroups(
-        undefined,
-        undefined,
-        movie_group_ex_column_names,
-        first,
-        after !== undefined ? decodeCursor(after) : undefined,
-        last,
-        before !== undefined ? decodeCursor(before) : undefined,
-        offset
-      );
+      const response =
+        await context.dataSources.moviesDataSource.getMovieGroups(
+          undefined,
+          undefined,
+          movie_group_ex_column_names,
+          first,
+          after !== undefined ? decodeCursor(after) : undefined,
+          last,
+          before !== undefined ? decodeCursor(before) : undefined,
+          offset
+        );
 
-      _transform2ValidFields(response.rows, movie_groups_fields_trans_data);
+      _transform2ValidFields(response.rows, groups_fields_trans_data);
 
       // translate "response.rows" to "edges"
       return buildConnectionResponse(
@@ -311,21 +326,59 @@ export const resolvers = {
         ["_id", "name"]
       );
     },
-    movieGroup: async (parent: unknown, { _id }: IIDArgs, context: IContext) => {
-      const response = await context.dataSources.moviesDataSource.getMovieGroups(
-        undefined,
-        parseInt(_id),
-        movie_group_ex_column_names
-      );
+    movieGroup: async (
+      parent: unknown,
+      { _id }: IIDArgs,
+      context: IContext
+    ) => {
+      const response =
+        await context.dataSources.moviesDataSource.getMovieGroups(
+          undefined,
+          parseInt(_id),
+          movie_group_ex_column_names
+        );
 
-      _transform2ValidFields(response.rows, movie_groups_fields_trans_data);
+      _transform2ValidFields(response.rows, groups_fields_trans_data);
       return response.rows.length === 1 ? response.rows[0] : null;
     },
-    groupTypes: (parent: unknown) => {
-      // TODO:
+    groupTypes: async (
+      parent: unknown,
+      { first, after, last, before, offset }: IConnectionArgs,
+      context: IContext
+    ): Promise<IConnectionResolver<Partial<IGroupType>>> => {
+      const response =
+        await context.dataSources.moviesDataSource.getMovieGroupTypes(
+          undefined,
+          group_type_ex_column_names,
+          first,
+          after !== undefined ? decodeCursor(after) : undefined,
+          last,
+          before !== undefined ? decodeCursor(before) : undefined,
+          offset
+        );
+
+      _transform2ValidFields(
+        response.rows,
+        movie_group_types_fields_trans_data
+      );
+
+      // translate "response.rows" to "edges"
+      return buildConnectionResponse(
+        response,
+        after !== undefined,
+        before !== undefined,
+        ["_id", "name"]
+      );
     },
-    groupType: (parent: unknown, { _id }: IIDArgs) => {
-      // TODO:
+    groupType: async (parent: unknown, { _id }: IIDArgs, context: IContext) => {
+      const response =
+        await context.dataSources.moviesDataSource.getMovieGroupTypes(
+          parseInt(_id),
+          group_type_ex_column_names
+        );
+
+      _transform2ValidFields(response.rows, groups_fields_trans_data);
+      return response.rows.length === 1 ? response.rows[0] : null;
     },
   },
 
@@ -397,7 +450,6 @@ export const resolvers = {
         column_values
       );
     },
-    // updateMovieGroup(_id: ID!, movieGroupInfo: MovieGroupInfoInput!): Boolean!
     updateMovieGroup: async (
       parent: unknown,
       {
@@ -421,7 +473,6 @@ export const resolvers = {
         return false;
       }
     },
-    // deleteMovieGroup(_id: ID!): Boolean!
     deleteMovieGroup: async (
       parent: unknown,
       { _id }: { _id: number },
@@ -429,6 +480,56 @@ export const resolvers = {
     ): Promise<boolean> => {
       try {
         await context.dataSources.moviesDataSource.deleteMovieGroup(_id);
+
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+    // group types
+    addGroupType: async (
+      parent: unknown,
+      { groupTypeInfo }: { groupTypeInfo: Record<string, unknown> },
+      context: IContext
+    ): Promise<number> => {
+      const { column_names, column_values } =
+        _objParams2ArrayParams(groupTypeInfo);
+
+      return await context.dataSources.moviesDataSource.addMovieGroupType(
+        column_names,
+        column_values
+      );
+    },
+    updateGroupType: async (
+      parent: unknown,
+      {
+        _id,
+        groupTypeInfo,
+      }: { _id: number; groupTypeInfo: Record<string, unknown> },
+      context: IContext
+    ): Promise<boolean> => {
+      const { column_names, column_values } =
+        _objParams2ArrayParams(groupTypeInfo);
+
+      try {
+        await context.dataSources.moviesDataSource.updateMovieGroupType(
+          _id,
+          column_names,
+          column_values
+        );
+
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+    deleteGroupType: async (
+      parent: unknown,
+      { _id }: { _id: number },
+      context: IContext
+    ): Promise<boolean> => {
+      try {
+        await context.dataSources.moviesDataSource.deleteMovieGroupType(_id);
 
         return true;
       } catch (e) {

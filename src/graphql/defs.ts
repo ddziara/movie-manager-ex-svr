@@ -1,5 +1,5 @@
 import { gql } from "apollo-server-core";
-import connectionDefs, { buildCoonectionEdgeTypes } from "./connection-defs"
+import connectionDefs, { buildConnectionEdgeTypes } from "./connection-defs"
 
 //                                                   
 //                  PositionedMovie <----------------- MovieGroup <--------------------- GroupType
@@ -86,15 +86,16 @@ export const typeDefs = gql`
     movies: [PositionedMovie!]!
   }
 
-  ${buildCoonectionEdgeTypes("Movies", "Movie", "Movie")}
-  ${buildCoonectionEdgeTypes("MovieGroups", "MovieGroup", "MovieGroup")}
+  ${buildConnectionEdgeTypes("Movies", "Movie", "Movie")}
+  ${buildConnectionEdgeTypes("MovieGroups", "MovieGroup", "MovieGroup")}
+  ${buildConnectionEdgeTypes("GroupTypes", "GroupType", "GroupType")}
  
   type Query {
     movies(first: Int, after: String, last: Int, before: String, offset: Int): MoviesConnection!
     movie(_id: ID!): Movie
     movieGroups(first: Int, after: String, last: Int, before: String, offset: Int): MovieGroupsConnection!
     movieGroup(_id: ID!): MovieGroup
-    groupTypes(first: Int, after: String, last: Int, before: String, offset: Int): [GroupType!]!
+    groupTypes(first: Int, after: String, last: Int, before: String, offset: Int): GroupTypesConnection!
     groupType(_id: ID!): GroupType
   }
 
@@ -141,6 +142,11 @@ export const typeDefs = gql`
     custom: String
   }
 
+  input GroupTypeInfoInput {
+    name: String
+    description: String
+  }
+
   type Mutation {
     # movies
     addMovie(mediaFullPath: String!, movieInfo: MovieInfoInput!): ID!
@@ -150,6 +156,10 @@ export const typeDefs = gql`
     addMovieGroup(movieGroupInfo: MovieGroupInfoInput!): ID!
     updateMovieGroup(_id: ID!, movieGroupInfo: MovieGroupInfoInput!): Boolean!
     deleteMovieGroup(_id: ID!): Boolean!
+    # group types
+    addGroupType(groupTypeInfo: GroupTypeInfoInput!): ID!
+    updateGroupType(_id: ID!, groupTypeInfo: GroupTypeInfoInput!): Boolean!
+    deleteGroupType(_id: ID!): Boolean!
   }
 `;
 

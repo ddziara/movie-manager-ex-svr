@@ -699,14 +699,22 @@ export abstract class DBDataMovieManager extends DBData {
    */
   async getMovieGroupTypes(
     tid: number | undefined,
-    limit?: number,
-    offset?: number
+    ex_column_names?: string[] | undefined,
+    first?: number | undefined,
+    after?: Record<string, unknown> | undefined,
+    last?: number | undefined,
+    before?: Record<string, unknown> | undefined,
+    offset?: number | undefined
   ): Promise<IGetRowsFunReturn> {
     this._throwIfNotReady();
 
-    const paging =
-      typeof limit !== "undefined" && typeof offset !== "undefined";
-    if (paging) tid = undefined;
+    if(tid !== undefined) {
+      first = undefined;
+      after = undefined;
+      last = undefined;
+      before = undefined;
+      offset = undefined;
+    }
 
     const moviegrouptype_tab = `${this.dbextra.moviegrouptype.getExtendedName()}`;
     const table_names = [moviegrouptype_tab];
@@ -716,25 +724,53 @@ export abstract class DBDataMovieManager extends DBData {
       `${moviegrouptype_tab}.name`,
       `${moviegrouptype_tab}.description`,
     ];
+
+    const searchParans = this._findSearchParams(
+            ["name", "_id"],
+            first,
+            after,
+            last,
+            before,
+            offset
+          );
+
+    this._appendExColumnNames(
+      column_names,
+      moviegrouptype_tab,
+      ex_column_names !== undefined
+        ? ex_column_names.concat(searchParans.indexFields)
+        : searchParans.indexFields
+    );
+
     const cond_col_names = typeof tid !== "undefined" ? id_column_names : [];
     const cond_col_values = typeof tid !== "undefined" ? [tid] : [];
     const join_conds: string[] = [];
     const extra_conds: string[] = [];
-    const order_col_names = [`name`];
 
-    const rows = await this.getRowsCore(
+    extra_conds.push(...searchParans.whereConds);
+
+    const order_col_names = searchParans.orderByCols;
+
+    let rows = await this.getRowsCore(
       table_names,
       column_names,
       cond_col_names,
       cond_col_values,
       join_conds,
       extra_conds,
-      undefined,
+      searchParans.whereParams,
       order_col_names,
       undefined,
-      limit,
-      offset
+      searchParans.limit,
+      searchParans.offset
     );
+
+    ({ rows, offset } = this._adjustRowsOffset(
+      rows,
+      searchParans.reversedOrder,
+      last,
+      offset
+    ));
 
     const total_count_property = {
       total_count:
@@ -749,8 +785,8 @@ export abstract class DBDataMovieManager extends DBData {
       id_col_names: this.getListOfIdColNames(id_column_names),
       rows,
       ...total_count_property,
-      reversedOrder: false,
-      offset: undefined,
+      reversedOrder: searchParans.reversedOrder,
+      offset,
     };
   }
 
