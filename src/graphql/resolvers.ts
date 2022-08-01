@@ -18,6 +18,7 @@ export interface IGroupType {
   _id: string;
   name: string;
   description: string;
+  movieGroups: IConnectionResolver<Partial<IMovieGroup>>;
 }
 
 export interface IMovieGroup {
@@ -31,6 +32,8 @@ export interface IMovieGroup {
   description: string;
   visible: Visibility;
   custom: string;
+  groupType: IGroupType;
+  movies: IConnectionResolver<Partial<IPositionedMovie>>;
 }
 
 export interface IMovie {
@@ -64,7 +67,11 @@ export interface IMovie {
   playDate: string;
   studio: string;
   protected: boolean;
-  movieGroups: IMovieGroup[];
+  movieGroups: IConnectionResolver<Partial<IMovieGroup>>;
+}
+
+export interface IPositionedMovie extends IMovie {
+  listOrder: number;
 }
 
 export interface IIDArgs {
@@ -227,6 +234,7 @@ const movies_fields_trans_data = _createTranslateData([
   "playDate",
   "studio",
   "protected",
+  "listOrder",
 ]);
 
 const groups_fields_trans_data = _createTranslateData([
@@ -248,6 +256,197 @@ const movie_group_types_fields_trans_data = _createTranslateData([
   `description`,
 ]);
 
+const getGroupType = async (
+  tid: number,
+  context: IContext
+): Promise<IGroupType | null> => {
+  const response =
+    await context.dataSources.moviesDataSource.getMovieGroupTypes(
+      tid,
+      group_type_ex_column_names
+    );
+
+  _transform2ValidFields(response.rows, groups_fields_trans_data);
+
+  const rows = response.rows.map((row) => ({
+    ...row,
+    movieGroups: async function (args: IConnectionArgs, context: IContext) {
+      return await getMovieGroupsConnection(
+        (this as unknown as IGroupType)._id,
+        undefined,
+        args,
+        context
+      );
+    },
+  }));
+
+  return rows.length === 1 ? (rows[0] as unknown as IGroupType) : null;
+};
+
+const getGroupTypesConnection = async (
+  { first, after, last, before, offset }: IConnectionArgs,
+  context: IContext
+): Promise<IConnectionResolver<Partial<IGroupType>>> => {
+  const response =
+    await context.dataSources.moviesDataSource.getMovieGroupTypes(
+      undefined,
+      group_type_ex_column_names,
+      first,
+      after !== undefined ? decodeCursor(after) : undefined,
+      last,
+      before !== undefined ? decodeCursor(before) : undefined,
+      offset
+    );
+
+  _transform2ValidFields(response.rows, movie_group_types_fields_trans_data);
+
+  // translate "response.rows" to "edges"
+  return buildConnectionResponse(
+    response,
+    after !== undefined,
+    before !== undefined,
+    ["_id", "name"],
+    () => ({
+      movieGroups: async function (args: IConnectionArgs, context: IContext) {
+        return await getMovieGroupsConnection(
+          (this as unknown as IGroupType)._id,
+          undefined,
+          args,
+          context
+        );
+      },
+    })
+  );
+};
+
+const getMovieGroupsConnection = async (
+  tid: string | undefined,
+  mid: string | undefined,
+  { first, after, last, before, offset }: IConnectionArgs,
+  context: IContext
+): Promise<IConnectionResolver<Partial<IMovieGroup>>> => {
+  if (mid !== undefined) {
+    // note: it utilizes DataSource caching to avoid duplicated requests
+    const response =
+      await context.dataSources.moviesDataSource.getGroupsOfMovie(
+        mid,
+        movie_group_ex_column_names,
+        first,
+        after !== undefined ? decodeCursor(after) : undefined,
+        last,
+        before !== undefined ? decodeCursor(before) : undefined,
+        offset
+      );
+
+    _transform2ValidFields(response.rows, groups_fields_trans_data);
+
+    // translate "response.rows" to "edges"
+    return buildConnectionResponse(
+      response,
+      after !== undefined,
+      before !== undefined,
+      ["_id", "name"],
+      () => ({
+        movies: async function (args: IConnectionArgs, context: IContext) {
+          return await getMoviesConnection<IPositionedMovie>(
+            parseInt((this as unknown as IMovieGroup)._id),
+            args,
+            context
+          );
+        },
+        groupType: async function (args: unknown, context: IContext) {
+          const gendid = (this as unknown as IMovieGroup & { gendid: number })
+            .gendid;
+
+          if (gendid) {
+            return await getGroupType(gendid, context);
+          } else {
+            return undefined;
+          }
+        },
+      }) // to enforce resolving this field by a type resolver function
+    );
+  } else {
+    // note: it utilizes DataSource caching to avoid duplicated requests
+    const response = await context.dataSources.moviesDataSource.getMovieGroups(
+      tid ? parseInt(tid) : undefined,
+      undefined,
+      movie_group_ex_column_names,
+      first,
+      after !== undefined ? decodeCursor(after) : undefined,
+      last,
+      before !== undefined ? decodeCursor(before) : undefined,
+      offset
+    );
+
+    _transform2ValidFields(response.rows, groups_fields_trans_data);
+
+    // translate "response.rows" to "edges"
+    return buildConnectionResponse(
+      response,
+      after !== undefined,
+      before !== undefined,
+      ["_id", "name"],
+      () => ({
+        movies: async function (args: IConnectionArgs, context: IContext) {
+          return await getMoviesConnection<IPositionedMovie>(
+            parseInt((this as unknown as IMovieGroup)._id),
+            args,
+            context
+          );
+        },
+        groupType: async function (args: unknown, context: IContext) {
+          const gendid = (this as unknown as IMovieGroup & { gendid: number })
+            .gendid;
+
+          if (gendid) {
+            return await getGroupType(gendid, context);
+          } else {
+            return undefined;
+          }
+        },
+      }) // to enforce resolving this field by a type resolver function
+    );
+  }
+};
+
+const getMoviesConnection = async <T>(
+  gid: number | undefined,
+  { first, after, last, before, offset }: IConnectionArgs,
+  context: IContext
+): Promise<IConnectionResolver<Partial<T>>> => {
+  const response = await context.dataSources.moviesDataSource.getMovies(
+    gid,
+    undefined,
+    movie_ex_column_names,
+    first,
+    after !== undefined ? decodeCursor(after) : undefined,
+    last,
+    before !== undefined ? decodeCursor(before) : undefined,
+    offset
+  );
+
+  _transform2ValidFields(response.rows, movies_fields_trans_data);
+
+  // translate "response.rows" to "edges"
+  return buildConnectionResponse(
+    response,
+    after !== undefined,
+    before !== undefined,
+    gid ? ["listOrder"] : ["_id", "title"],
+    () => ({
+      movieGroups: async function (args: IConnectionArgs, context: IContext) {
+        return await getMovieGroupsConnection(
+          undefined,
+          (this as unknown as IMovie)._id,
+          args,
+          context
+        );
+      },
+    }) // to enforce resolving this field by a type resolver function
+  );
+};
+
 export const resolvers = {
   Visibility: {
     INVISIBLE: Visibility.INVISIBLE,
@@ -263,32 +462,8 @@ export const resolvers = {
   },
 
   Query: {
-    movies: async (
-      parent: unknown,
-      { first, after, last, before, offset }: IConnectionArgs,
-      context: IContext
-    ): Promise<IConnectionResolver<Partial<IMovie>>> => {
-      const response = await context.dataSources.moviesDataSource.getMovies(
-        undefined,
-        undefined,
-        movie_ex_column_names,
-        first,
-        after !== undefined ? decodeCursor(after) : undefined,
-        last,
-        before !== undefined ? decodeCursor(before) : undefined,
-        offset
-      );
-
-      _transform2ValidFields(response.rows, movies_fields_trans_data);
-
-      // translate "response.rows" to "edges"
-      return buildConnectionResponse(
-        response,
-        after !== undefined,
-        before !== undefined,
-        ["_id", "title"]
-      );
-    },
+    movies: async (parent: unknown, args: IConnectionArgs, context: IContext) =>
+      await getMoviesConnection<IMovie>(undefined, args, context),
     movie: async (parent: unknown, { _id }: IIDArgs, context: IContext) => {
       const response = await context.dataSources.moviesDataSource.getMovies(
         undefined,
@@ -297,35 +472,26 @@ export const resolvers = {
       );
 
       _transform2ValidFields(response.rows, movies_fields_trans_data);
-      return response.rows.length === 1 ? response.rows[0] : null;
+
+      const rows = response.rows.map((row) => ({
+        ...row,
+        movieGroups: async function (args: IConnectionArgs, context: IContext) {
+          return await getMovieGroupsConnection(
+            undefined,
+            (this as unknown as IMovie)._id,
+            args,
+            context
+          );
+        },
+      }));
+
+      return rows.length === 1 ? rows[0] : null;
     },
     movieGroups: async (
       parent: unknown,
-      { first, after, last, before, offset }: IConnectionArgs,
+      args: IConnectionArgs,
       context: IContext
-    ): Promise<IConnectionResolver<Partial<IMovieGroup>>> => {
-      const response =
-        await context.dataSources.moviesDataSource.getMovieGroups(
-          undefined,
-          undefined,
-          movie_group_ex_column_names,
-          first,
-          after !== undefined ? decodeCursor(after) : undefined,
-          last,
-          before !== undefined ? decodeCursor(before) : undefined,
-          offset
-        );
-
-      _transform2ValidFields(response.rows, groups_fields_trans_data);
-
-      // translate "response.rows" to "edges"
-      return buildConnectionResponse(
-        response,
-        after !== undefined,
-        before !== undefined,
-        ["_id", "name"]
-      );
-    },
+    ) => await getMovieGroupsConnection(undefined, undefined, args, context),
     movieGroup: async (
       parent: unknown,
       { _id }: IIDArgs,
@@ -339,46 +505,37 @@ export const resolvers = {
         );
 
       _transform2ValidFields(response.rows, groups_fields_trans_data);
-      return response.rows.length === 1 ? response.rows[0] : null;
+
+      const rows = response.rows.map((row) => ({
+        ...row,
+        movies: async function (args: IConnectionArgs, context: IContext) {
+          return await getMoviesConnection<IPositionedMovie>(
+            parseInt((this as unknown as IMovieGroup)._id),
+            args,
+            context
+          );
+        },
+        groupType: async function (args: unknown, context: IContext) {
+          const gendid = (this as unknown as IMovieGroup & { gendid: number })
+            .gendid;
+
+          if (gendid) {
+            return await getGroupType(gendid, context);
+          } else {
+            return undefined;
+          }
+        },
+      }));
+
+      return rows.length === 1 ? rows[0] : null;
     },
     groupTypes: async (
       parent: unknown,
-      { first, after, last, before, offset }: IConnectionArgs,
+      args: IConnectionArgs,
       context: IContext
-    ): Promise<IConnectionResolver<Partial<IGroupType>>> => {
-      const response =
-        await context.dataSources.moviesDataSource.getMovieGroupTypes(
-          undefined,
-          group_type_ex_column_names,
-          first,
-          after !== undefined ? decodeCursor(after) : undefined,
-          last,
-          before !== undefined ? decodeCursor(before) : undefined,
-          offset
-        );
-
-      _transform2ValidFields(
-        response.rows,
-        movie_group_types_fields_trans_data
-      );
-
-      // translate "response.rows" to "edges"
-      return buildConnectionResponse(
-        response,
-        after !== undefined,
-        before !== undefined,
-        ["_id", "name"]
-      );
-    },
+    ) => getGroupTypesConnection(args, context),
     groupType: async (parent: unknown, { _id }: IIDArgs, context: IContext) => {
-      const response =
-        await context.dataSources.moviesDataSource.getMovieGroupTypes(
-          parseInt(_id),
-          group_type_ex_column_names
-        );
-
-      _transform2ValidFields(response.rows, groups_fields_trans_data);
-      return response.rows.length === 1 ? response.rows[0] : null;
+      return await getGroupType(parseInt(_id), context);
     },
   },
 
@@ -388,8 +545,15 @@ export const resolvers = {
       parent: unknown,
       {
         mediaFullPath,
+        gid,
+        listOrder,
         movieInfo,
-      }: { mediaFullPath: string; movieInfo: Record<string, unknown> },
+      }: {
+        mediaFullPath: string;
+        gid: string;
+        listOrder: number;
+        movieInfo: Record<string, unknown>;
+      },
       context: IContext
     ): Promise<string> => {
       const { column_names, column_values } = _objParams2ArrayParams(movieInfo);
@@ -397,8 +561,8 @@ export const resolvers = {
       column_values.unshift(mediaFullPath);
 
       return await context.dataSources.moviesDataSource.addMovie(
-        undefined,
-        undefined,
+        gid !== undefined ? parseInt(gid) : undefined,
+        listOrder,
         column_names,
         column_values
       );
@@ -437,14 +601,17 @@ export const resolvers = {
     // moviegroup
     addMovieGroup: async (
       parent: unknown,
-      { movieGroupInfo }: { movieGroupInfo: Record<string, unknown> },
+      {
+        tid,
+        movieGroupInfo,
+      }: { tid: string; movieGroupInfo: Record<string, unknown> },
       context: IContext
     ): Promise<number> => {
       const { column_names, column_values } =
         _objParams2ArrayParams(movieGroupInfo);
 
       return await context.dataSources.moviesDataSource.addMovieGroup(
-        undefined,
+        tid ? parseInt(tid) : undefined,
         undefined,
         column_names,
         column_values
@@ -531,6 +698,73 @@ export const resolvers = {
       try {
         await context.dataSources.moviesDataSource.deleteMovieGroupType(_id);
 
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+    // movie groups & movies
+    associateMovieAndMovieGroup: async (
+      parent: unknown,
+      {
+        _mid,
+        _gid,
+        listOrder,
+      }: { _mid: string; _gid: number; listOrder: number },
+      context: IContext
+    ) => {
+      try {
+        await context.dataSources.moviesDataSource.markMovieGroupMember(
+          _mid,
+          _gid,
+          listOrder
+        );
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+    unassociateMovieAndMovieGroup: async (
+      parent: unknown,
+      { _mid, _gid }: { _mid: string; _gid: number },
+      context: IContext
+    ) => {
+      try {
+        await context.dataSources.moviesDataSource.unmarkMovieGroupMember(
+          _gid,
+          _mid
+        );
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+    // group types & movie groups
+    moveMovieGroup2Type: async (
+      parent: unknown,
+      { _gid, _tid }: { _gid: number; _tid: number },
+      context: IContext
+    ) => {
+      try {
+        await context.dataSources.moviesDataSource.moveMovieGroup2AnotherType(
+          _gid,
+          _tid
+        );
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+    removeMovieGroupFromType: async (
+      parent: unknown,
+      { _gid }: { _gid: number },
+      context: IContext
+    ) => {
+      try {
+        await context.dataSources.moviesDataSource.moveMovieGroup2NoType(
+          0,
+          _gid
+        );
         return true;
       } catch (e) {
         return false;

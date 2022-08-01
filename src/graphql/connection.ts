@@ -45,14 +45,32 @@ export const encodeCursor = (cursor: Record<string, unknown>): string => {
   return Buffer.from(s).toString("base64");
 };
 
+/**
+ * Function builds connection response object for given response.rows
+ * 
+ * @param response 
+ * @param hasPreviousPage 
+ * @param hasNextPage 
+ * @param cursorFields 
+ * @param extraFields - extra fields to add to each row (for example to enforce resolving field type) or function returning extra fields and row as parameter
+ * @returns 
+ */
 export const buildConnectionResponse = <T>(
   response: IGetRowsFunReturn,
   hasPreviousPage: boolean,
   hasNextPage: boolean,
-  cursorFields: string[]
+  cursorFields: string[],
+  extraFields?: Record<string, unknown> | (() => Record<string, unknown>)
 ): IConnectionResolver<Partial<T>> => {
-  // translate "response.rows" to "edges"
-  const edges = response.rows.map((row) => {
+  const rows = extraFields
+    ? response.rows.map((row) => ({
+        ...row,
+        ...(typeof extraFields === "function" ? extraFields()  : extraFields),
+      }))
+    : response.rows;
+
+  // translate "rows" to "edges"
+  const edges = rows.map((row) => {
     const cursorObj: Record<string, unknown> = {};
 
     for (let i = 0; i < cursorFields.length; i++)
@@ -77,32 +95,28 @@ export const buildConnectionResponse = <T>(
       // ^ row_k_p1
       // ^  ...
       // ^ <----- start
-      // ^ ... 
-      const hasNextPageFromOffset = 
-      response.offset !== undefined
-        ? response.offset > 0
-        : false;
+      // ^ ...
+      const hasNextPageFromOffset =
+        response.offset !== undefined ? response.offset > 0 : false;
 
       hasPreviousPage2 = response.total_count > edges.length + actualOffset;
       hasNextPage2 = hasNextPage || hasNextPageFromOffset;
     } else {
       const hasPreviousPageFromOffset =
-      response.offset !== undefined
-        ? response.offset > 0
-        : false;
-  
+        response.offset !== undefined ? response.offset > 0 : false;
+
       hasPreviousPage2 = hasPreviousPage || hasPreviousPageFromOffset;
       hasNextPage2 = response.total_count > edges.length + actualOffset;
     }
 
     // note: assuming correct order of rows
-    startCursor = edges[0].cursor; 
-    endCursor = edges[edges.length - 1].cursor; 
+    startCursor = edges[0].cursor;
+    endCursor = edges[edges.length - 1].cursor;
   }
 
   const connection: IConnectionResolver<Partial<T>> = {
     edges,
-    nodes: response.rows as unknown as Partial<T>[],
+    nodes: rows as unknown as Partial<T>[],
     pageInfo: {
       hasPreviousPage: hasPreviousPage2,
       hasNextPage: hasNextPage2,
