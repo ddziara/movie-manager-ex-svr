@@ -5,6 +5,7 @@ import {
   IGroupType,
   IMovie,
   IMovieGroup,
+  IPositionedMovie,
   resolvers,
 } from "../graphql/resolvers";
 import knx, { Knex } from "knex";
@@ -16,7 +17,7 @@ import { dateToUTCString } from "../database/utils";
 import { IConnection, IEdge } from "../graphql/connection";
 import { GraphQLResponse } from "apollo-server-core";
 
-jest.setTimeout(60000);
+jest.setTimeout(600000);
 
 const base64RegExpr =
   /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{3}=|[A-Za-z\d+/]{2}==)?$/;
@@ -94,7 +95,12 @@ const _updateSearchCriteria = (
   params: string,
   variablesObj: IVariablesObject,
   results: GraphQLResponse[],
-  graphQLFieldName: string
+  graphQLFieldName: string,
+  getConnection?:
+    | ((
+        result: GraphQLResponse
+      ) => IConnection<Partial<Record<string, unknown>>>)
+    | undefined
 ) => {
   if (cursorInfo !== undefined) {
     let cursor;
@@ -103,24 +109,18 @@ const _updateSearchCriteria = (
         ? results.length + cursorInfo.resOffset
         : cursorInfo.resOffset;
 
+    const connection = getConnection
+      ? getConnection(results[resIndex])
+      : ((results[resIndex].data as Record<string, unknown>)[
+          graphQLFieldName
+        ] as IConnection<Partial<Record<string, unknown>>>);
+
     if (cursorInfo.type === CursorInfoType.START_CURSOR) {
-      cursor = (
-        (results[resIndex].data as Record<string, unknown>)[
-          graphQLFieldName
-        ] as IConnection<Partial<IMovie>>
-      ).pageInfo.startCursor;
+      cursor = connection.pageInfo.startCursor;
     } else if (cursorInfo.type === CursorInfoType.END_CURSOR) {
-      cursor = (
-        (results[resIndex].data as Record<string, unknown>)[
-          graphQLFieldName
-        ] as IConnection<Partial<IMovie>>
-      ).pageInfo.endCursor;
+      cursor = connection.pageInfo.endCursor;
     } else if (cursorInfo.type === CursorInfoType.EDGE_CURSOR) {
-      const edges = (
-        (results[resIndex].data as Record<string, unknown>)[
-          graphQLFieldName
-        ] as IConnection<Partial<IMovie>>
-      ).edges;
+      const edges = connection.edges;
 
       if (edges) {
         cursor = edges[cursorInfo.edgeIndex].cursor;
@@ -148,7 +148,12 @@ const _getGraphQLPagingParams = (
   beforeInfo: ICursorInfo,
   offset: number,
   results: GraphQLResponse[],
-  graphQLFieldName: string
+  graphQLFieldName: string,
+  getConnection?:
+    | ((
+        result: GraphQLResponse
+      ) => IConnection<Partial<Record<string, unknown>>>)
+    | undefined
 ): IGraphQLPagingParams => {
   let variables = "";
   let params = "";
@@ -170,7 +175,8 @@ const _getGraphQLPagingParams = (
     params,
     variablesObj,
     results,
-    graphQLFieldName
+    graphQLFieldName,
+    getConnection
   ));
   ({ variables, params } = _updateNumberParam(
     last,
@@ -186,7 +192,8 @@ const _getGraphQLPagingParams = (
     params,
     variablesObj,
     results,
-    graphQLFieldName
+    graphQLFieldName,
+    getConnection
   ));
   ({ variables, params } = _updateNumberParam(
     offset,
@@ -201,10 +208,10 @@ const _getGraphQLPagingParams = (
 
   return { variables, params, variablesObj };
 };
-
+// ${"cyberlink"}
+// ${"postgres"}
 describe.each`
   appPlatform
-  ${"cyberlink"}
   ${"postgres"}
 `(
   "Testing GraphQL querries, mutations and subscriptions",
@@ -308,6 +315,7 @@ describe.each`
             filename: getCyberlinkRootDBPath().concat(getCyberlinkRootDBName()),
           },
           useNullAsDefault: true,
+          //          debug: true,
         });
 
         const { DBDataMovieManagerCyberlink } = await import(
@@ -1576,13 +1584,13 @@ describe.each`
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
-          const moviesConnection = result2.data["groupTypes"] as IConnection<
-            Partial<IGroupType>
-          >;
-          expect(moviesConnection.edges).not.toBeNull();
+          const groupTypesConnection = result2.data[
+            "groupTypes"
+          ] as IConnection<Partial<IGroupType>>;
+          expect(groupTypesConnection.edges).not.toBeNull();
 
-          if (moviesConnection.edges) {
-            const row0 = moviesConnection.edges[0].node;
+          if (groupTypesConnection.edges) {
+            const row0 = groupTypesConnection.edges[0].node;
             if (row0._id !== undefined) {
               expect(parseInt(row0._id)).toBeGreaterThanOrEqual(1);
             }
@@ -1754,9 +1762,7 @@ describe.each`
         expect(result2.errors).toBeUndefined();
 
         if (result2.data) {
-          expect(parseInt(result2.data.addGroupType)).toBeGreaterThanOrEqual(
-            1
-          );
+          expect(parseInt(result2.data.addGroupType)).toBeGreaterThanOrEqual(1);
         }
       });
       test("Adding a group type", async () => {
@@ -1769,9 +1775,7 @@ describe.each`
         expect(result3.errors).toBeUndefined();
 
         if (result3.data) {
-          expect(parseInt(result3.data.addGroupType)).toBeGreaterThanOrEqual(
-            1
-          );
+          expect(parseInt(result3.data.addGroupType)).toBeGreaterThanOrEqual(1);
         }
       });
       test("Adding a group type", async () => {
@@ -1784,9 +1788,7 @@ describe.each`
         expect(result4.errors).toBeUndefined();
 
         if (result4.data) {
-          expect(parseInt(result4.data.addGroupType)).toBeGreaterThanOrEqual(
-            1
-          );
+          expect(parseInt(result4.data.addGroupType)).toBeGreaterThanOrEqual(1);
         }
       });
       test("Adding a group type", async () => {
@@ -1799,9 +1801,7 @@ describe.each`
         expect(result5.errors).toBeUndefined();
 
         if (result5.data) {
-          expect(parseInt(result5.data.addGroupType)).toBeGreaterThanOrEqual(
-            1
-          );
+          expect(parseInt(result5.data.addGroupType)).toBeGreaterThanOrEqual(1);
         }
       });
 
@@ -1859,7 +1859,7 @@ describe.each`
         ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
         ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name4, description4], [name, description]]}
         ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[name, description]]}
-            `(
+      `(
         "Getting group types (first=$first, afer=$afterInfo, last=$last, before=$beforeInfo, offset=$offset)",
         ({
           first,
@@ -1912,7 +1912,9 @@ describe.each`
               expect(groupTypesConnection.pageInfo.hasPreviousPage).toBe(
                 expPrevPage
               );
-              expect(groupTypesConnection.pageInfo.hasNextPage).toBe(expNextPage);
+              expect(groupTypesConnection.pageInfo.hasNextPage).toBe(
+                expNextPage
+              );
 
               const edges = groupTypesConnection.edges;
 
@@ -1997,6 +1999,2369 @@ describe.each`
       });
     });
 
+    describe("Testing movies in groups", () => {
+      const groupName = `Action`;
+      //==
+      const groupName2 = `Adventure`;
+      //==
+      const groupName3 = `Drama`;
+      //==
+      const groupName4 = `Favourive`;
+      //==
+      const groupName5 = `George Lucas`;
+      //==
+      const groupName6 = `3D`;
+      //==
+      const groupName7 = `Star Wars`;
+      //==
+      const title = `The Perfect Storm (2000)`;
+      const folder = `Perfect Storm (2000), The `;
+      const mediaFullPath = `C:\\Movies\\${folder}\\The.Perfect.Storm.(2000).mkv`;
+      //==
+      const title2 = `Star Wars: Episode IV - New Hope, A (1977)`;
+      const folder2 = `Star Wars; Episode IV - A New Hope (1977)`;
+      const mediaFullPath2 = `C:\\Movies\\${folder2}\\Star Wars.Episode.IV.A.New.Hope.(1977).mkv`;
+      //==
+      const title3 = `Star Wars: Episode V - Empire Strikes Back, The (1980)`;
+      const folder3 = `Star Wars; Episode V - The Empire Strikes Back (1980)`;
+      const mediaFullPath3 = `C:\\Movies\\${folder3}\\Star.Wars.Episode.V.The.Empire.Strikes.Back.(1980).mkv`;
+      //==
+      const title4 = `Star Wars: Episode VI - Return of the Jedi (1983)`;
+      const folder4 = `Star Wars; Episode VI - Return of the Jedi (1983)`;
+      const mediaFullPath4 = `C:\\Movies\\${folder4}\\Star.Wars.Episode.VI.Return.of.the.Jedi.(1983).mkv`;
+      //==
+      const title5 = `Star Wars: Episode I - Phantom Menace, The (1999)`;
+      const folder5 = `Star Wars; Episode I - The Phantom Menace (1999)`;
+      const mediaFullPath5 = `C:\\Movies\\${folder5}\\Star.Wars.Episode.I.The.Phantom.Menace.(1999).mkv`;
+      //==
+      const title6 = `Star Wars: Episode II - Attack of the Clones (2002)`;
+      const folder6 = `Star Wars; Episode II - Attack of the Clones (2002)`;
+      const mediaFullPath6 = `C:\\Movies\\${folder6}\\Star.Wars.Episode.II.Attack.of.the.Clones.(2002).mkv`;
+      //==
+      const title7 = `Star Wars: Episode III - Revenge of the Sith (2005)`;
+      const folder7 = `Star Wars; Episode III - Revenge of the Sith (2005)`;
+      const mediaFullPath7 = `C:\\Movies\\${folder7}\\Star.Wars.Episode.III.Revenge.of.the.Sith.(2005).mkv`;
+      //==
+      let groupResult: GraphQLResponse;
+      let groupResult2: GraphQLResponse;
+      let groupResult3: GraphQLResponse;
+      let groupResult4: GraphQLResponse;
+      let groupResult5: GraphQLResponse;
+      let groupResult6: GraphQLResponse;
+      let groupResult7: GraphQLResponse;
+      //==
+      let movieResult: GraphQLResponse;
+      let movieResult2: GraphQLResponse;
+      let movieResult3: GraphQLResponse;
+      let movieResult4: GraphQLResponse;
+      let movieResult5: GraphQLResponse;
+      let movieResult6: GraphQLResponse;
+      let movieResult7: GraphQLResponse;
+
+      beforeAll(async () => {
+        await _initData();
+      });
+      afterAll(async () => {
+        await _uninitData();
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName },
+        });
+
+        expect(groupResult.errors).toBeUndefined();
+
+        if (groupResult.data) {
+          expect(
+            parseInt(groupResult.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath,
+            gid: groupResult.data?.addMovieGroup,
+            title,
+          },
+        });
+
+        expect(movieResult.errors).toBeUndefined();
+
+        if (movieResult.data) {
+          expect(movieResult.data.addMovie).toBe(`MOVIE_${mediaFullPath}`);
+        }
+      });
+
+      test("Getting all movies", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "query GetMovies { movies { edges { node { _id title mediaFullPath movieGroups { nodes { name } }} } } }",
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const moviesConnection = result2.data["movies"] as IConnection<
+            Partial<IMovie>
+          >;
+          expect(moviesConnection.edges).not.toBeNull();
+
+          if (moviesConnection.edges) {
+            const row0 = moviesConnection.edges[0].node;
+            expect(row0._id).toBe(`MOVIE_${mediaFullPath}`);
+            expect(row0.title).toBe(title);
+            expect(row0.mediaFullPath).toBe(mediaFullPath);
+            expect(row0.movieGroups).not.toBeUndefined();
+
+            if (row0.movieGroups) {
+              const movieGroupsConnection = row0.movieGroups as IConnection<
+                Partial<IMovieGroup>
+              >;
+              expect(movieGroupsConnection.nodes).not.toBeNull();
+
+              if (movieGroupsConnection.nodes) {
+                expect(movieGroupsConnection.nodes.length).toBe(1);
+                expect(movieGroupsConnection.nodes[0].name).toBe(groupName);
+              }
+            }
+          }
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult2 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName2 },
+        });
+
+        expect(groupResult2.errors).toBeUndefined();
+
+        if (groupResult2.data) {
+          expect(
+            parseInt(groupResult2.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult3 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName3 },
+        });
+
+        expect(groupResult3.errors).toBeUndefined();
+
+        if (groupResult3.data) {
+          expect(
+            parseInt(groupResult3.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult4 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName4 },
+        });
+
+        expect(groupResult4.errors).toBeUndefined();
+
+        if (groupResult4.data) {
+          expect(
+            parseInt(groupResult4.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult5 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName5 },
+        });
+
+        expect(groupResult5.errors).toBeUndefined();
+
+        if (groupResult5.data) {
+          expect(
+            parseInt(groupResult5.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult6 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName6 },
+        });
+
+        expect(groupResult6.errors).toBeUndefined();
+
+        if (groupResult6.data) {
+          expect(
+            parseInt(groupResult6.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Getting all movies", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "query GetMovies { movies { edges { node { _id title mediaFullPath movieGroups { nodes { name } }} } } }",
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const moviesConnection = result2.data["movies"] as IConnection<
+            Partial<IMovie>
+          >;
+          expect(moviesConnection.edges).not.toBeNull();
+
+          if (moviesConnection.edges) {
+            const row0 = moviesConnection.edges[0].node;
+            expect(row0._id).toBe(`MOVIE_${mediaFullPath}`);
+            expect(row0.title).toBe(title);
+            expect(row0.mediaFullPath).toBe(mediaFullPath);
+            expect(row0.movieGroups).not.toBeUndefined();
+
+            if (row0.movieGroups) {
+              const movieGroupsConnection = row0.movieGroups as IConnection<
+                Partial<IMovieGroup>
+              >;
+              expect(movieGroupsConnection.nodes).not.toBeNull();
+
+              if (movieGroupsConnection.nodes) {
+                expect(movieGroupsConnection.nodes.length).toBe(1);
+                expect(movieGroupsConnection.nodes[0].name).toBe(groupName);
+              }
+            }
+          }
+        }
+      });
+
+      test("Associating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult2.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      test("Associating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult3.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      test("Associating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult4.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      test("Associating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult5.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      test("Associating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult6.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      test("Getting all movies", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "query GetMovies { movies { edges { node { _id title mediaFullPath movieGroups { nodes { name } }} } } }",
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const moviesConnection = result2.data["movies"] as IConnection<
+            Partial<IMovie>
+          >;
+          expect(moviesConnection.edges).not.toBeNull();
+
+          if (moviesConnection.edges) {
+            const row0 = moviesConnection.edges[0].node;
+            expect(row0._id).toBe(`MOVIE_${mediaFullPath}`);
+            expect(row0.title).toBe(title);
+            expect(row0.mediaFullPath).toBe(mediaFullPath);
+            expect(row0.movieGroups).not.toBeUndefined();
+
+            if (row0.movieGroups) {
+              const movieGroupsConnection = row0.movieGroups as IConnection<
+                Partial<IMovieGroup>
+              >;
+              expect(movieGroupsConnection.nodes).not.toBeNull();
+
+              if (movieGroupsConnection.nodes) {
+                expect(movieGroupsConnection.nodes.length).toBe(6);
+                expect(movieGroupsConnection.nodes[0].name).toBe(groupName6);
+                expect(movieGroupsConnection.nodes[1].name).toBe(groupName);
+                expect(movieGroupsConnection.nodes[2].name).toBe(groupName2);
+                expect(movieGroupsConnection.nodes[3].name).toBe(groupName3);
+                expect(movieGroupsConnection.nodes[4].name).toBe(groupName4);
+                expect(movieGroupsConnection.nodes[5].name).toBe(groupName5);
+              }
+            }
+          }
+        }
+      });
+
+      test("Getting given movie", async () => {
+        const result2 = await testServer.executeOperation({
+          query: `query GetMovies($_id: ID!) { 
+                movie(_id: $_id) { 
+                  _id title mediaFullPath movieGroups { nodes { name } }
+                } 
+              }`,
+          variables: { _id: movieResult.data?.addMovie },
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const movie = result2.data["movie"] as IMovie;
+
+          expect(movie).not.toBeNull();
+
+          if (movie) {
+            expect(movie._id).toBe(`MOVIE_${mediaFullPath}`);
+            expect(movie.title).toBe(title);
+            expect(movie.mediaFullPath).toBe(mediaFullPath);
+            expect(movie.movieGroups).not.toBeUndefined();
+
+            if (movie.movieGroups) {
+              const movieGroupsConnection = movie.movieGroups as IConnection<
+                Partial<IMovieGroup>
+              >;
+              expect(movieGroupsConnection.nodes).not.toBeNull();
+
+              if (movieGroupsConnection.nodes) {
+                expect(movieGroupsConnection.nodes.length).toBe(6);
+                expect(movieGroupsConnection.nodes[0].name).toBe(groupName6);
+                expect(movieGroupsConnection.nodes[1].name).toBe(groupName);
+                expect(movieGroupsConnection.nodes[2].name).toBe(groupName2);
+                expect(movieGroupsConnection.nodes[3].name).toBe(groupName3);
+                expect(movieGroupsConnection.nodes[4].name).toBe(groupName4);
+                expect(movieGroupsConnection.nodes[5].name).toBe(groupName5);
+              }
+            }
+          }
+        }
+      });
+
+      test("Unassociating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation UnassociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { unassociateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult6.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      test("Getting all movies", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "query GetMovies { movies { edges { node { _id title mediaFullPath movieGroups { nodes { name } }} } } }",
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const moviesConnection = result2.data["movies"] as IConnection<
+            Partial<IMovie>
+          >;
+          expect(moviesConnection.edges).not.toBeNull();
+
+          if (moviesConnection.edges) {
+            const row0 = moviesConnection.edges[0].node;
+            expect(row0._id).toBe(`MOVIE_${mediaFullPath}`);
+            expect(row0.title).toBe(title);
+            expect(row0.mediaFullPath).toBe(mediaFullPath);
+            expect(row0.movieGroups).not.toBeUndefined();
+
+            if (row0.movieGroups) {
+              const movieGroupsConnection = row0.movieGroups as IConnection<
+                Partial<IMovieGroup>
+              >;
+              expect(movieGroupsConnection.nodes).not.toBeNull();
+
+              if (movieGroupsConnection.nodes) {
+                expect(movieGroupsConnection.nodes.length).toBe(5);
+                expect(movieGroupsConnection.nodes[0].name).toBe(groupName);
+                expect(movieGroupsConnection.nodes[1].name).toBe(groupName2);
+                expect(movieGroupsConnection.nodes[2].name).toBe(groupName3);
+                expect(movieGroupsConnection.nodes[3].name).toBe(groupName4);
+                expect(movieGroupsConnection.nodes[4].name).toBe(groupName5);
+              }
+            }
+          }
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult7 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName7 },
+        });
+
+        expect(groupResult7.errors).toBeUndefined();
+
+        if (groupResult7.data) {
+          expect(
+            parseInt(groupResult7.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult2 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath2,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 1,
+            title: title2,
+          },
+        });
+
+        expect(movieResult2.errors).toBeUndefined();
+
+        if (movieResult2.data) {
+          expect(movieResult2.data.addMovie).toBe(`MOVIE_${mediaFullPath2}`);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult3 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath3,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 2,
+            title: title3,
+          },
+        });
+
+        expect(movieResult3.errors).toBeUndefined();
+
+        if (movieResult3.data) {
+          expect(movieResult3.data.addMovie).toBe(`MOVIE_${mediaFullPath3}`);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult4 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath4,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 3,
+            title: title4,
+          },
+        });
+
+        expect(movieResult4.errors).toBeUndefined();
+
+        if (movieResult4.data) {
+          expect(movieResult4.data.addMovie).toBe(`MOVIE_${mediaFullPath4}`);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult5 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath5,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 1,
+            title: title5,
+          },
+        });
+
+        expect(movieResult5.errors).toBeUndefined();
+
+        if (movieResult5.data) {
+          expect(movieResult5.data.addMovie).toBe(`MOVIE_${mediaFullPath5}`);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult6 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath6,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 2,
+            title: title6,
+          },
+        });
+
+        expect(movieResult6.errors).toBeUndefined();
+
+        if (movieResult6.data) {
+          expect(movieResult6.data.addMovie).toBe(`MOVIE_${mediaFullPath6}`);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult7 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath7,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 3,
+            title: title7,
+          },
+        });
+
+        expect(movieResult7.errors).toBeUndefined();
+
+        if (movieResult7.data) {
+          expect(movieResult7.data.addMovie).toBe(`MOVIE_${mediaFullPath7}`);
+        }
+      });
+
+      test("Getting all movie groups", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "query GetMovieGroups { movieGroups { edges { node { _id name movies { nodes { title listOrder } } } } } }",
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const movieGroupsConnection = result2.data[
+            "movieGroups"
+          ] as IConnection<Partial<IMovieGroup>>;
+          expect(movieGroupsConnection.edges).not.toBeNull();
+
+          if (movieGroupsConnection.edges) {
+            expect(movieGroupsConnection.edges.length).toBe(7);
+            //==
+            const row0 = movieGroupsConnection.edges[0].node;
+
+            if (row0._id !== undefined) {
+              expect(parseInt(row0._id)).toBeGreaterThanOrEqual(1);
+            }
+
+            expect(row0.name).toBe(groupName6);
+
+            expect(row0.movies?.nodes?.length).toBe(0);
+            //===
+            const row1 = movieGroupsConnection.edges[1].node;
+
+            if (row1._id !== undefined) {
+              expect(parseInt(row1._id)).toBeGreaterThanOrEqual(1);
+            }
+
+            expect(row1.name).toBe(groupName);
+
+            const moviesConnection1 = row1.movies as IConnection<
+              Partial<IPositionedMovie>
+            >;
+
+            expect(moviesConnection1.nodes).not.toBeNull();
+            expect(moviesConnection1.nodes?.length).toBe(1);
+
+            //===
+            if (moviesConnection1.nodes) {
+              expect(moviesConnection1.nodes.length).toBe(1);
+              //===
+              const row1_0 = moviesConnection1.nodes[0];
+              expect(row1_0.listOrder).toBe(1);
+              expect(row1_0.title).toBe(title);
+            }
+            //===
+            const row2 = movieGroupsConnection.edges[2].node;
+
+            if (row2._id !== undefined) {
+              expect(parseInt(row2._id)).toBeGreaterThanOrEqual(1);
+            }
+
+            expect(row2.name).toBe(groupName2);
+
+            const moviesConnection2 = row2.movies as IConnection<
+              Partial<IPositionedMovie>
+            >;
+
+            expect(moviesConnection2.nodes).not.toBeNull();
+            expect(moviesConnection2.nodes?.length).toBe(1);
+
+            //===
+            if (moviesConnection2.nodes) {
+              expect(moviesConnection2.nodes.length).toBe(1);
+              //===
+              const row2_0 = moviesConnection2.nodes[0];
+              expect(row2_0.listOrder).toBe(1);
+              expect(row2_0.title).toBe(title);
+            }
+            //===
+            const row3 = movieGroupsConnection.edges[3].node;
+
+            if (row3._id !== undefined) {
+              expect(parseInt(row3._id)).toBeGreaterThanOrEqual(1);
+            }
+
+            expect(row3.name).toBe(groupName3);
+
+            const moviesConnection3 = row3.movies as IConnection<
+              Partial<IPositionedMovie>
+            >;
+
+            expect(moviesConnection3.nodes).not.toBeNull();
+            expect(moviesConnection3.nodes?.length).toBe(1);
+
+            //===
+            if (moviesConnection3.nodes) {
+              expect(moviesConnection3.nodes.length).toBe(1);
+              //===
+              const row3_0 = moviesConnection3.nodes[0];
+              expect(row3_0.listOrder).toBe(1);
+              expect(row3_0.title).toBe(title);
+            }
+            //===
+            const row4 = movieGroupsConnection.edges[4].node;
+
+            if (row4._id !== undefined) {
+              expect(parseInt(row4._id)).toBeGreaterThanOrEqual(1);
+            }
+
+            expect(row4.name).toBe(groupName4);
+
+            const moviesConnection4 = row3.movies as IConnection<
+              Partial<IPositionedMovie>
+            >;
+
+            expect(moviesConnection4.nodes).not.toBeNull();
+            expect(moviesConnection4.nodes?.length).toBe(1);
+
+            //===
+            if (moviesConnection4.nodes) {
+              expect(moviesConnection4.nodes.length).toBe(1);
+              //===
+              const row4_0 = moviesConnection4.nodes[0];
+              expect(row4_0.listOrder).toBe(1);
+              expect(row4_0.title).toBe(title);
+            }
+            //===
+            const row5 = movieGroupsConnection.edges[5].node;
+
+            if (row5._id !== undefined) {
+              expect(parseInt(row5._id)).toBeGreaterThanOrEqual(1);
+            }
+
+            expect(row5.name).toBe(groupName5);
+
+            const moviesConnection5 = row5.movies as IConnection<
+              Partial<IPositionedMovie>
+            >;
+
+            expect(moviesConnection5.nodes).not.toBeNull();
+            expect(moviesConnection5.nodes?.length).toBe(1);
+
+            //===
+            if (moviesConnection5.nodes) {
+              expect(moviesConnection5.nodes.length).toBe(1);
+              //===
+              const row5_0 = moviesConnection4.nodes[0];
+              expect(row5_0.listOrder).toBe(1);
+              expect(row5_0.title).toBe(title);
+            }
+            //===
+            const row6 = movieGroupsConnection.edges[6].node;
+
+            if (row6._id !== undefined) {
+              expect(parseInt(row6._id)).toBeGreaterThanOrEqual(1);
+            }
+
+            expect(row6.name).toBe(groupName7);
+
+            const moviesConnection6 = row6.movies as IConnection<
+              Partial<IPositionedMovie>
+            >;
+
+            expect(moviesConnection6.nodes).not.toBeNull();
+
+            //===
+            if (moviesConnection6.nodes) {
+              expect(moviesConnection6.nodes.length).toBe(6);
+              //===
+              const row6_0 = moviesConnection6.nodes[0];
+              expect(row6_0.listOrder).toBe(1);
+              expect(row6_0.title).toBe(title5);
+              //===
+              const row6_1 = moviesConnection6.nodes[1];
+              expect(row6_1.listOrder).toBe(2);
+              expect(row6_1.title).toBe(title6);
+              //===
+              const row6_2 = moviesConnection6.nodes[2];
+              expect(row6_2.listOrder).toBe(3);
+              expect(row6_2.title).toBe(title7);
+              //===
+              const row6_3 = moviesConnection6.nodes[3];
+              expect(row6_3.listOrder).toBe(4);
+              expect(row6_3.title).toBe(title2);
+              //===
+              const row6_4 = moviesConnection6.nodes[4];
+              expect(row6_4.listOrder).toBe(5);
+              expect(row6_4.title).toBe(title3);
+              //===
+              const row6_5 = moviesConnection6.nodes[5];
+              expect(row6_5.listOrder).toBe(6);
+              expect(row6_5.title).toBe(title4);
+            }
+          }
+        }
+      });
+
+      test("Getting given movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query: `query GetMovieGroup($_id: ID!) { 
+        movieGroup(_id: $_id) { 
+          _id name movies { nodes { title listOrder } } 
+        } 
+      }`,
+          variables: { _id: groupResult7.data?.addMovieGroup },
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const movieGroup = result2.data["movieGroup"] as IMovieGroup;
+          expect(movieGroup).not.toBeNull();
+
+          if (movieGroup) {
+            const moviesConnection = movieGroup.movies;
+
+            //===
+            if (moviesConnection.nodes) {
+              expect(moviesConnection.nodes.length).toBe(6);
+              //===
+              const row6_0 = moviesConnection.nodes[0];
+              expect(row6_0.listOrder).toBe(1);
+              expect(row6_0.title).toBe(title5);
+              //===
+              const row6_1 = moviesConnection.nodes[1];
+              expect(row6_1.listOrder).toBe(2);
+              expect(row6_1.title).toBe(title6);
+              //===
+              const row6_2 = moviesConnection.nodes[2];
+              expect(row6_2.listOrder).toBe(3);
+              expect(row6_2.title).toBe(title7);
+              //===
+              const row6_3 = moviesConnection.nodes[3];
+              expect(row6_3.listOrder).toBe(4);
+              expect(row6_3.title).toBe(title2);
+              //===
+              const row6_4 = moviesConnection.nodes[4];
+              expect(row6_4.listOrder).toBe(5);
+              expect(row6_4.title).toBe(title3);
+              //===
+              const row6_5 = moviesConnection.nodes[5];
+              expect(row6_5.listOrder).toBe(6);
+              expect(row6_5.title).toBe(title4);
+            }
+          }
+        }
+      });
+    });
+
+    describe("Testing groups of movies paging", () => {
+      const groupName = `Action`;
+      //==
+      const groupName2 = `Adventure`;
+      //==
+      const groupName3 = `Drama`;
+      //==
+      const groupName4 = `Favourive`;
+      //==
+      const groupName5 = `George Lucas`;
+      //==
+      const title = `The Perfect Storm (2000)`;
+      const folder = `Perfect Storm (2000), The `;
+      const mediaFullPath = `C:\\Movies\\${folder}\\The.Perfect.Storm.(2000).mkv`;
+      //==
+      let movieResult: GraphQLResponse;
+      //==
+      let groupResult: GraphQLResponse;
+      let groupResult2: GraphQLResponse;
+      let groupResult3: GraphQLResponse;
+      let groupResult4: GraphQLResponse;
+      let groupResult5: GraphQLResponse;
+      //==
+      const results: GraphQLResponse[] = [];
+
+      beforeAll(async () => {
+        await _initData();
+      });
+      afterAll(async () => {
+        await _uninitData();
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName },
+        });
+
+        expect(groupResult.errors).toBeUndefined();
+
+        if (groupResult.data) {
+          expect(
+            parseInt(groupResult.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath,
+            gid: groupResult.data?.addMovieGroup,
+            title,
+          },
+        });
+
+        expect(movieResult.errors).toBeUndefined();
+
+        if (movieResult.data) {
+          expect(movieResult.data.addMovie).toBe(`MOVIE_${mediaFullPath}`);
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult2 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName2 },
+        });
+
+        expect(groupResult2.errors).toBeUndefined();
+
+        if (groupResult2.data) {
+          expect(
+            parseInt(groupResult2.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult3 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName3 },
+        });
+
+        expect(groupResult3.errors).toBeUndefined();
+
+        if (groupResult3.data) {
+          expect(
+            parseInt(groupResult3.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult4 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName4 },
+        });
+
+        expect(groupResult4.errors).toBeUndefined();
+
+        if (groupResult4.data) {
+          expect(
+            parseInt(groupResult4.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult5 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName5 },
+        });
+
+        expect(groupResult5.errors).toBeUndefined();
+
+        if (groupResult5.data) {
+          expect(
+            parseInt(groupResult5.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Associating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult2.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      test("Associating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult3.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      test("Associating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult4.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      test("Associating movie & movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+          variables: {
+            _mid: movieResult.data?.addMovie,
+            _gid: groupResult5.data?.addMovieGroup,
+          },
+        });
+
+        expect(result2.data).toBeTruthy();
+      });
+
+      describe.each`
+        first        | afterInfo                                                           | last         | beforeInfo                                                          | offset       | expPrevPage | expNextPage | expData
+        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[groupName], [groupName2], [groupName3], [groupName4], [groupName5]]}
+        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName5]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -2 }}             | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${false}    | ${[]}
+        ${7}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[groupName], [groupName2], [groupName3], [groupName4], [groupName5]]}
+        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4], [groupName5]]}
+        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[groupName]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -2 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${2}         | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${3}         | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${4}         | ${false}    | ${true}     | ${[[groupName]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${5}         | ${false}    | ${false}    | ${[]}
+        ${3}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2], [groupName3]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 1 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName3], [groupName4], [groupName5]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
+        ${2}         | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+        ${2}         | ${undefined}                                                        | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2]]}
+        ${2}         | ${undefined}                                                        | ${3}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+        ${2}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+        ${5}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[[groupName], [groupName2], [groupName3], [groupName4]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${5}         | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[groupName2], [groupName3], [groupName4], [groupName5]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${3}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${2}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+        ${1}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName2], [groupName3], [groupName4]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName2], [groupName3], [groupName4]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[]}
+        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName3], [groupName4]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName3], [groupName4]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName3]]}
+      `(
+        "Getting groups of a movie (first=$first, afer=$afterInfo, last=$last, before=$beforeInfo, offset=$offset)",
+        ({
+          first,
+          afterInfo,
+          last,
+          beforeInfo,
+          offset,
+          expPrevPage,
+          expNextPage,
+          expData,
+        }: IPagingInfo) => {
+          test("", async () => {
+            const { variables, params, variablesObj } = _getGraphQLPagingParams(
+              first,
+              afterInfo,
+              last,
+              beforeInfo,
+              offset,
+              results,
+              "movieGroups",
+              (result: GraphQLResponse) => {
+                const moviesConnection = (
+                  result.data as Record<string, unknown>
+                )["movies"] as IConnection<Partial<IMovie>>;
+                return moviesConnection.nodes[0].movieGroups as IConnection<
+                  Partial<IMovieGroup>
+                >;
+              }
+            );
+
+            const result = await testServer.executeOperation({
+              query: `query GetMovies${variables} { movies { nodes { title movieGroups${params} { 
+              edges { 
+                node { name } 
+                cursor 
+              }
+              pageInfo {
+                hasPreviousPage
+                hasNextPage
+                startCursor
+                endCursor
+              }
+            } } } }`,
+              ...variablesObj,
+            });
+
+            results.push(result);
+
+            expect(result.data).toBeTruthy();
+
+            if (result.data) {
+              const moviesConnection = result.data["movies"] as IConnection<
+                Partial<IMovie>
+              >;
+              expect(moviesConnection.edges).not.toBeNull();
+
+              const nodes = moviesConnection.nodes;
+
+              if (nodes) {
+                expect(nodes.length).toBe(1);
+                //===
+                const row = nodes[0];
+
+                expect(row.title).toBe(title);
+                expect(row.movieGroups).not.toBeNull();
+
+                if (row.movieGroups) {
+                  const edges = row.movieGroups.edges;
+                  expect(edges).not.toBeNull();
+
+                  expect(row.movieGroups.pageInfo.hasPreviousPage).toBe(
+                    expPrevPage
+                  );
+                  expect(row.movieGroups.pageInfo.hasNextPage).toBe(
+                    expNextPage
+                  );
+
+                  if (edges) {
+                    expect(edges.length).toBe(expData.length);
+                    //===
+                    for (let i = 0; i < edges.length; i++) {
+                      const row = edges[i].node;
+
+                      expect(row.name).toBe(expData[i][0]);
+                    }
+                  }
+                }
+              }
+            }
+          });
+        }
+      );
+    });
+
+    describe("Testing movies in group paging", () => {
+      const groupName7 = `Star Wars`;
+      //==
+      const title2 = `Star Wars: Episode IV - New Hope, A (1977)`;
+      const folder2 = `Star Wars; Episode IV - A New Hope (1977)`;
+      const mediaFullPath2 = `C:\\Movies\\${folder2}\\Star Wars.Episode.IV.A.New.Hope.(1977).mkv`;
+      //==
+      const title3 = `Star Wars: Episode V - Empire Strikes Back, The (1980)`;
+      const folder3 = `Star Wars; Episode V - The Empire Strikes Back (1980)`;
+      const mediaFullPath3 = `C:\\Movies\\${folder3}\\Star.Wars.Episode.V.The.Empire.Strikes.Back.(1980).mkv`;
+      //==
+      const title5 = `Star Wars: Episode I - Phantom Menace, The (1999)`;
+      const folder5 = `Star Wars; Episode I - The Phantom Menace (1999)`;
+      const mediaFullPath5 = `C:\\Movies\\${folder5}\\Star.Wars.Episode.I.The.Phantom.Menace.(1999).mkv`;
+      //==
+      const title6 = `Star Wars: Episode II - Attack of the Clones (2002)`;
+      const folder6 = `Star Wars; Episode II - Attack of the Clones (2002)`;
+      const mediaFullPath6 = `C:\\Movies\\${folder6}\\Star.Wars.Episode.II.Attack.of.the.Clones.(2002).mkv`;
+      //==
+      const title7 = `Star Wars: Episode III - Revenge of the Sith (2005)`;
+      const folder7 = `Star Wars; Episode III - Revenge of the Sith (2005)`;
+      const mediaFullPath7 = `C:\\Movies\\${folder7}\\Star.Wars.Episode.III.Revenge.of.the.Sith.(2005).mkv`;
+      //==
+      let groupResult7: GraphQLResponse;
+      //==
+      let movieResult2: GraphQLResponse;
+      let movieResult3: GraphQLResponse;
+      let movieResult5: GraphQLResponse;
+      let movieResult6: GraphQLResponse;
+      let movieResult7: GraphQLResponse;
+      //==
+      const results: GraphQLResponse[] = [];
+
+      beforeAll(async () => {
+        await _initData();
+      });
+      afterAll(async () => {
+        await _uninitData();
+      });
+
+      test("Adding a movie group", async () => {
+        groupResult7 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: { name: groupName7 },
+        });
+
+        expect(groupResult7.errors).toBeUndefined();
+
+        if (groupResult7.data) {
+          expect(
+            parseInt(groupResult7.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult2 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath2,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 1,
+            title: title2,
+          },
+        });
+
+        expect(movieResult2.errors).toBeUndefined();
+
+        if (movieResult2.data) {
+          expect(movieResult2.data.addMovie).toBe(`MOVIE_${mediaFullPath2}`);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult3 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath3,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 2,
+            title: title3,
+          },
+        });
+
+        expect(movieResult3.errors).toBeUndefined();
+
+        if (movieResult3.data) {
+          expect(movieResult3.data.addMovie).toBe(`MOVIE_${mediaFullPath3}`);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult5 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath5,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 1,
+            title: title5,
+          },
+        });
+
+        expect(movieResult5.errors).toBeUndefined();
+
+        if (movieResult5.data) {
+          expect(movieResult5.data.addMovie).toBe(`MOVIE_${mediaFullPath5}`);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult6 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath6,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 2,
+            title: title6,
+          },
+        });
+
+        expect(movieResult6.errors).toBeUndefined();
+
+        if (movieResult6.data) {
+          expect(movieResult6.data.addMovie).toBe(`MOVIE_${mediaFullPath6}`);
+        }
+      });
+
+      test("Adding a movie to a group", async () => {
+        movieResult7 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: mediaFullPath7,
+            gid: groupResult7.data?.addMovieGroup,
+            listOrder: 3,
+            title: title7,
+          },
+        });
+
+        expect(movieResult7.errors).toBeUndefined();
+
+        if (movieResult7.data) {
+          expect(movieResult7.data.addMovie).toBe(`MOVIE_${mediaFullPath7}`);
+        }
+      });
+
+      describe.each`
+        first        | afterInfo                                                           | last         | beforeInfo                                                          | offset       | expPrevPage | expNextPage | expData
+        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[title5, 1], [title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
+        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title3, 5]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -2 }}             | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${false}    | ${[]}
+        ${7}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[title5, 1], [title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
+        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
+        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[title5, 1]]}
+        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -2 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${2}         | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${3}         | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${4}         | ${false}    | ${true}     | ${[[title5, 1]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${5}         | ${false}    | ${false}    | ${[]}
+        ${3}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2], [title7, 3]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 1 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title7, 3], [title2, 4], [title3, 5]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
+        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
+        ${2}         | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+        ${2}         | ${undefined}                                                        | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2]]}
+        ${2}         | ${undefined}                                                        | ${3}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+        ${2}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+        ${5}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[[title5, 1], [title6, 2], [title7, 3], [title2, 4]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${5}         | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title7, 3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${3}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${2}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+        ${1}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title5, 1]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title6, 2], [title7, 3], [title2, 4]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title6, 2], [title7, 3], [title2, 4]]}
+        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[]}
+        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title7, 3], [title2, 4]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title7, 3], [title2, 4]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title7, 3]]}
+      `(
+        "Getting movies in group (first=$first, afer=$afterInfo, last=$last, before=$beforeInfo, offset=$offset)",
+        ({
+          first,
+          afterInfo,
+          last,
+          beforeInfo,
+          offset,
+          expPrevPage,
+          expNextPage,
+          expData,
+        }: IPagingInfo) => {
+          test("", async () => {
+            const { variables, params, variablesObj } = _getGraphQLPagingParams(
+              first,
+              afterInfo,
+              last,
+              beforeInfo,
+              offset,
+              results,
+              "movies",
+              (result: GraphQLResponse) => {
+                const movieGroupsConnection = (
+                  result.data as Record<string, unknown>
+                )["movieGroups"] as IConnection<Partial<IMovieGroup>>;
+                return movieGroupsConnection.nodes[0].movies as IConnection<
+                  Partial<IMovie>
+                >;
+              }
+            );
+
+            const result = await testServer.executeOperation({
+              query: `query GetMovieGroups${variables} { movieGroups { nodes { name movies${params} { 
+              edges { 
+                node { title listOrder } 
+                cursor 
+              }
+              pageInfo {
+                hasPreviousPage
+                hasNextPage
+                startCursor
+                endCursor
+              }
+            } } } }`,
+              ...variablesObj,
+            });
+
+            results.push(result);
+
+            expect(result.data).toBeTruthy();
+
+            if (result.data) {
+              const movieGroupsConnection = result.data[
+                "movieGroups"
+              ] as IConnection<Partial<IMovieGroup>>;
+              expect(movieGroupsConnection.edges).not.toBeNull();
+
+              const nodes = movieGroupsConnection.nodes;
+
+              if (nodes) {
+                expect(nodes.length).toBe(1);
+                //===
+                const row = nodes[0];
+
+                expect(row.name).toBe(groupName7);
+
+                if (row.movies) {
+                  const edges = row.movies.edges;
+                  expect(edges).not.toBeNull();
+
+                  expect(row.movies.pageInfo.hasPreviousPage).toBe(expPrevPage);
+                  expect(row.movies.pageInfo.hasNextPage).toBe(expNextPage);
+
+                  if (edges) {
+                    expect(edges.length).toBe(expData.length);
+                    //===
+                    for (let i = 0; i < edges.length; i++) {
+                      const row = edges[i].node;
+
+                      expect(row.title).toBe(expData[i][0]);
+                      expect(row.listOrder).toBe(expData[i][1]);
+                    }
+                  }
+                }
+              }
+            }
+          });
+        }
+      );
+    });
+
+    describe("Testing groups of movies & group types", () => {
+      const groupTypeName = "Director";
+      const groupTypeName2 = "Writer";
+      //===
+      const groupName = "Ridley Scott";
+      const groupName2 = "Stephen King";
+      //===
+      const movieTitle = `Alien (1979)`;
+      const movieFolder = `Alien (1979)`;
+      const movieMediaFullPath = `C:\\Movies\\${movieFolder}\\Alien.(1979).mkv`;
+      //===
+      let groupTypeResult: GraphQLResponse;
+      let groupTypeResult2: GraphQLResponse;
+      let groupResult: GraphQLResponse;
+      let groupResult2: GraphQLResponse;
+      let movieResult: GraphQLResponse;
+
+      beforeAll(async () => {
+        await _initData();
+      });
+      afterAll(async () => {
+        await _uninitData();
+      });
+
+      test("Adding a group type", async () => {
+        groupTypeResult = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String!, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name: groupTypeName },
+        });
+
+        expect(groupTypeResult.errors).toBeUndefined();
+
+        if (groupTypeResult.data) {
+          expect(
+            parseInt(groupTypeResult.data.addGroupType)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Add a group of movies of given type", async () => {
+        groupResult = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($tid: ID, $name: String) { addMovieGroup(tid: $tid, movieGroupInfo: { name: $name } ) }",
+          variables: {
+            tid: groupTypeResult.data?.addGroupType,
+            name: groupName,
+          },
+        });
+
+        expect(groupResult.errors).toBeUndefined();
+
+        if (groupResult.data) {
+          expect(
+            parseInt(groupResult.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Getting all movie groups", async () => {
+        const result2 = await testServer.executeOperation({
+          query:
+            "query GetMovieGroups { movieGroups { edges { node { _id name groupType { name } } } } }",
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const movieGroupsConnection = result2.data[
+            "movieGroups"
+          ] as IConnection<Partial<IMovieGroup>>;
+          expect(movieGroupsConnection.edges).not.toBeNull();
+
+          if (movieGroupsConnection.edges) {
+            const row0 = movieGroupsConnection.edges[0].node;
+
+            if (row0._id !== undefined) {
+              expect(parseInt(row0._id)).toBeGreaterThanOrEqual(1);
+            }
+
+            expect(row0.name).toBe(groupName);
+            expect(row0.groupType).not.toBeNull();
+
+            if (row0.groupType) {
+              expect(row0.groupType.name).toBe(groupTypeName);
+            }
+          }
+        }
+      });
+
+      test("Getting given movie group", async () => {
+        const result2 = await testServer.executeOperation({
+          query: `query GetMovieGroup($_id: ID!) { 
+              movieGroup(_id: $_id) { 
+                _id name groupType { name } 
+              } 
+            }`,
+
+          variables: { _id: groupResult.data?.addMovieGroup },
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const movieGroup = result2.data["movieGroup"] as Partial<IMovieGroup>;
+          expect(movieGroup).not.toBeNull();
+
+          if (movieGroup) {
+            if (movieGroup._id !== undefined) {
+              expect(parseInt(movieGroup._id)).toBeGreaterThanOrEqual(1);
+            }
+
+            expect(movieGroup.name).toBe(groupName);
+            expect(movieGroup.groupType).not.toBeNull();
+
+            if (movieGroup.groupType) {
+              expect(movieGroup.groupType.name).toBe(groupTypeName);
+            }
+          }
+        }
+      });
+
+      test("Adding a movie", async () => {
+        movieResult = await testServer.executeOperation({
+          query:
+            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, movieInfo: { title: $title } ) }",
+          variables: {
+            mediaFullPath: movieMediaFullPath,
+            gid: groupResult.data?.addMovieGroup,
+            title: movieTitle,
+          },
+        });
+
+        expect(movieResult.errors).toBeUndefined();
+
+        if (movieResult.data) {
+          expect(movieResult.data.addMovie).toBe(`MOVIE_${movieMediaFullPath}`);
+        }
+      });
+
+      test("Getting given movie", async () => {
+        const result = await testServer.executeOperation({
+          query: `query GetMovie($_id: ID!) { 
+              movie(_id: $_id) { 
+                _id title mediaFullPath 
+                movieGroups {
+                  nodes { 
+                    groupType {
+                      name
+                    }
+                  }
+                } 
+              } 
+            }`,
+          variables: { _id: movieResult.data?.addMovie },
+        });
+
+        expect(result.data).toBeTruthy();
+
+        if (result.data) {
+          const movie = result.data["movie"] as IMovie;
+          expect(movie._id).toBe(`MOVIE_${movieMediaFullPath}`);
+          expect(movie.title).toBe(movieTitle);
+          expect(movie.mediaFullPath).toBe(movieMediaFullPath);
+
+          expect(movie.movieGroups).not.toBeNull();
+
+          if (movie.movieGroups) {
+            const movieGroups = movie.movieGroups.nodes;
+
+            expect(movieGroups).not.toBeNull();
+
+            if (movieGroups) {
+              expect(movieGroups.length).toBe(1);
+
+              const movieGroup0 = movieGroups[0];
+
+              expect(movieGroup0.groupType).not.toBeNull();
+
+              if (movieGroup0.groupType) {
+                expect(movieGroup0.groupType.name).toBe(groupTypeName);
+              }
+            }
+          }
+        }
+      });
+
+      test("Adding a group type", async () => {
+        groupTypeResult2 = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String!, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name: groupTypeName2 },
+        });
+
+        expect(groupTypeResult2.errors).toBeUndefined();
+
+        if (groupTypeResult2.data) {
+          expect(
+            parseInt(groupTypeResult2.data.addGroupType)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Add a group of movies of given type", async () => {
+        groupResult2 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($tid: ID, $name: String) { addMovieGroup(tid: $tid, movieGroupInfo: { name: $name } ) }",
+          variables: {
+            tid: groupTypeResult2.data?.addGroupType,
+            name: groupName2,
+          },
+        });
+
+        expect(groupResult2.errors).toBeUndefined();
+
+        if (groupResult2.data) {
+          expect(
+            parseInt(groupResult2.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Getting all group types", async () => {
+        const result = await testServer.executeOperation({
+          query: `query GetGroupTypes { 
+              groupTypes { 
+                nodes {
+                  _id name description 
+
+                  movieGroups {
+                    nodes {
+                      name
+                    }
+                  }
+                }
+              } 
+            }`,
+        });
+
+        expect(result.errors).toBeUndefined();
+        expect(result.data).toBeTruthy();
+
+        if (result.data) {
+          const groupTypesConnection = result.data["groupTypes"] as IConnection<
+            Partial<IGroupType>
+          >;
+          expect(groupTypesConnection.nodes).not.toBeNull();
+
+          if (groupTypesConnection.nodes) {
+            expect(groupTypesConnection.nodes.length).toBe(2);
+
+            const groupType0 = groupTypesConnection.nodes[0];
+            if (groupType0._id !== undefined) {
+              expect(parseInt(groupType0._id)).toBeGreaterThanOrEqual(1);
+            }
+            expect(groupType0.name).toBe(groupTypeName);
+
+            expect(groupType0.movieGroups).not.toBeNull();
+
+            if (groupType0.movieGroups) {
+              expect(groupType0.movieGroups.nodes).not.toBeNull();
+
+              if (groupType0.movieGroups.nodes) {
+                expect(groupType0.movieGroups.nodes.length).toBe(1);
+                const movieGroup0 = groupType0.movieGroups.nodes[0];
+                expect(movieGroup0.name).toBe(groupName);
+              }
+            }
+
+            //==
+            const groupType1 = groupTypesConnection.nodes[1];
+            if (groupType1._id !== undefined) {
+              expect(parseInt(groupType1._id)).toBeGreaterThanOrEqual(1);
+            }
+            expect(groupType1.name).toBe(groupTypeName2);
+
+            expect(groupType1.movieGroups).not.toBeNull();
+
+            if (groupType1.movieGroups) {
+              expect(groupType1.movieGroups.nodes).not.toBeNull();
+
+              if (groupType1.movieGroups.nodes) {
+                expect(groupType1.movieGroups.nodes.length).toBe(1);
+                const movieGroup0 = groupType1.movieGroups.nodes[0];
+                expect(movieGroup0.name).toBe(groupName2);
+              }
+            }
+          }
+        }
+      });
+
+      test("Getting given group type", async () => {
+        const result = await testServer.executeOperation({
+          query: `query GetGroupType($_id: ID!) { 
+              groupType(_id: $_id) { 
+                _id name description 
+
+                movieGroups {
+                  nodes {
+                    name
+                  }
+                }
+              } 
+            }`,
+          variables: { _id: groupTypeResult.data?.addGroupType },
+        });
+
+        expect(result.errors).toBeUndefined();
+        expect(result.data).toBeTruthy();
+
+        if (result.data) {
+          const groupType = result.data["groupType"] as Partial<IGroupType>;
+
+          if (groupType._id !== undefined) {
+            expect(parseInt(groupType._id)).toBeGreaterThanOrEqual(1);
+          }
+          expect(groupType.name).toBe(groupTypeName);
+
+          expect(groupType.movieGroups).not.toBeNull();
+
+          if (groupType.movieGroups) {
+            expect(groupType.movieGroups.nodes).not.toBeNull();
+
+            if (groupType.movieGroups.nodes) {
+              expect(groupType.movieGroups.nodes.length).toBe(1);
+              const movieGroup0 = groupType.movieGroups.nodes[0];
+              expect(movieGroup0.name).toBe(groupName);
+            }
+          }
+        }
+      });
+    });
+
+    describe("Testing moving/removing movie group to/from group type", () => {
+      const groupTypeName = "Director";
+      const groupTypeName2 = "Writer";
+      const groupTypeName3 = "Genre";
+      //===
+      const groupName = "Ridley Scott";
+      const groupName2 = "Stephen King";
+      const groupName3 = "Horror";
+      const groupName4 = "Sci-Fi";
+      //===
+      let groupTypeResult: GraphQLResponse;
+      let groupTypeResult2: GraphQLResponse;
+      let groupTypeResult3: GraphQLResponse;
+      //===
+      let groupResult: GraphQLResponse;
+      let groupResult2: GraphQLResponse;
+      let groupResult3: GraphQLResponse;
+      let groupResult4: GraphQLResponse;
+
+      beforeAll(async () => {
+        await _initData();
+      });
+      afterAll(async () => {
+        await _uninitData();
+      });
+
+      test("Adding a group type", async () => {
+        groupTypeResult = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String!, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name: groupTypeName },
+        });
+
+        expect(groupTypeResult.errors).toBeUndefined();
+
+        if (groupTypeResult.data) {
+          expect(
+            parseInt(groupTypeResult.data.addGroupType)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a group type", async () => {
+        groupTypeResult2 = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String!, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name: groupTypeName2 },
+        });
+
+        expect(groupTypeResult2.errors).toBeUndefined();
+
+        if (groupTypeResult2.data) {
+          expect(
+            parseInt(groupTypeResult2.data.addGroupType)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Adding a group type", async () => {
+        groupTypeResult3 = await testServer.executeOperation({
+          query:
+            "mutation CreateGroupType($name: String!, $description: String) { addGroupType(groupTypeInfo: { name: $name, description: $description } ) }",
+          variables: { name: groupTypeName3 },
+        });
+
+        expect(groupTypeResult3.errors).toBeUndefined();
+
+        if (groupTypeResult3.data) {
+          expect(
+            parseInt(groupTypeResult3.data.addGroupType)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Add a group of movies", async () => {
+        groupResult = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: {
+            name: groupName,
+          },
+        });
+
+        expect(groupResult.errors).toBeUndefined();
+
+        if (groupResult.data) {
+          expect(
+            parseInt(groupResult.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Add a group of movies", async () => {
+        groupResult2 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: {
+            name: groupName2,
+          },
+        });
+
+        expect(groupResult2.errors).toBeUndefined();
+
+        if (groupResult2.data) {
+          expect(
+            parseInt(groupResult2.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Add a group of movies", async () => {
+        groupResult3 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: {
+            name: groupName3,
+          },
+        });
+
+        expect(groupResult3.errors).toBeUndefined();
+
+        if (groupResult3.data) {
+          expect(
+            parseInt(groupResult3.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      test("Add a group of movies", async () => {
+        groupResult4 = await testServer.executeOperation({
+          query:
+            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+          variables: {
+            name: groupName4,
+          },
+        });
+
+        expect(groupResult4.errors).toBeUndefined();
+
+        if (groupResult4.data) {
+          expect(
+            parseInt(groupResult4.data.addMovieGroup)
+          ).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      // moveMovieGroup2Type(_gid: ID!, _tid: ID!): Boolean!
+
+      test("Move a group of movies to group type", async () => {
+        const result = await testServer.executeOperation({
+          query:
+            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+            }`,
+          variables: {
+            _gid: groupResult.data?.addMovieGroup, // "Ridley Scott"
+            _tid: groupTypeResult3.data?.addGroupType, // "Genre"
+          },
+        });
+
+        expect(result.errors).toBeUndefined();
+        expect(result.data?.moveMovieGroup2Type).toBe(true);
+      });
+
+      test("Getting all group types", async () => {
+        const result2 = await testServer.executeOperation({
+          query: `query GetGroupTypes { 
+              groupTypes { 
+                nodes { 
+                  name 
+                  movieGroups { 
+                    nodes { 
+                      name 
+                    } 
+                  } 
+                } 
+              } 
+            }`,
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const groupTypesConnection = result2.data[
+            "groupTypes"
+          ] as IConnection<Partial<IGroupType>>;
+          expect(groupTypesConnection.nodes).not.toBeNull();
+
+          if (groupTypesConnection.nodes) {
+            expect(groupTypesConnection.nodes.length).toBe(3);
+
+            const groupType0 = groupTypesConnection.nodes[0];
+            expect(groupType0.name).toBe(groupTypeName);
+
+            expect(groupType0.movieGroups).not.toBeNull();
+
+            if (groupType0.movieGroups) {
+              expect(groupType0.movieGroups.nodes).not.toBeNull();
+
+              if (groupType0.movieGroups.nodes) {
+                expect(groupType0.movieGroups.nodes.length).toBe(0);
+              }
+            }
+            //===
+            const groupType1 = groupTypesConnection.nodes[1];
+            expect(groupType1.name).toBe(groupTypeName3);
+
+            expect(groupType1.movieGroups).not.toBeNull();
+
+            if (groupType1.movieGroups) {
+              expect(groupType1.movieGroups.nodes).not.toBeNull();
+
+              if (groupType1.movieGroups.nodes) {
+                expect(groupType1.movieGroups.nodes.length).toBe(1);
+
+                const movieGroups = groupType1.movieGroups.nodes;
+
+                const movieGroup0 = movieGroups[0];
+                expect(movieGroup0.name).toBe(groupName);
+              }
+            }
+            //===
+            const groupType2 = groupTypesConnection.nodes[2];
+            expect(groupType2.name).toBe(groupTypeName2);
+
+            expect(groupType2.movieGroups).not.toBeNull();
+
+            if (groupType2.movieGroups) {
+              expect(groupType2.movieGroups.nodes).not.toBeNull();
+
+              if (groupType2.movieGroups.nodes) {
+                expect(groupType2.movieGroups.nodes.length).toBe(0);
+              }
+            }
+          }
+        }
+      });
+
+      test("Move a group of movies to group type", async () => {
+        const result = await testServer.executeOperation({
+          query:
+            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+            }`,
+          variables: {
+            _gid: groupResult.data?.addMovieGroup, // "Ridley Scott"
+            _tid: groupTypeResult.data?.addGroupType, // "Director"
+          },
+        });
+
+        expect(result.errors).toBeUndefined();
+        expect(result.data?.moveMovieGroup2Type).toBe(true);
+      });
+
+      test("Getting all group types", async () => {
+        const result2 = await testServer.executeOperation({
+          query: `query GetGroupTypes { 
+              groupTypes { 
+                nodes { 
+                  name 
+                  movieGroups { 
+                    nodes { 
+                      name 
+                    } 
+                  } 
+                } 
+              } 
+            }`,
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const groupTypesConnection = result2.data[
+            "groupTypes"
+          ] as IConnection<Partial<IGroupType>>;
+          expect(groupTypesConnection.nodes).not.toBeNull();
+
+          if (groupTypesConnection.nodes) {
+            expect(groupTypesConnection.nodes.length).toBe(3);
+
+            const groupType0 = groupTypesConnection.nodes[0];
+            expect(groupType0.name).toBe(groupTypeName);
+
+            expect(groupType0.movieGroups).not.toBeNull();
+
+            if (groupType0.movieGroups) {
+              expect(groupType0.movieGroups.nodes).not.toBeNull();
+
+              if (groupType0.movieGroups.nodes) {
+                expect(groupType0.movieGroups.nodes.length).toBe(1);
+
+                const movieGroups = groupType0.movieGroups.nodes;
+
+                const movieGroup0 = movieGroups[0];
+                expect(movieGroup0.name).toBe(groupName);              }
+            }
+            //===
+            const groupType1 = groupTypesConnection.nodes[1];
+            expect(groupType1.name).toBe(groupTypeName3);
+
+            expect(groupType1.movieGroups).not.toBeNull();
+
+            if (groupType1.movieGroups) {
+              expect(groupType1.movieGroups.nodes).not.toBeNull();
+
+              if (groupType1.movieGroups.nodes) {
+                expect(groupType1.movieGroups.nodes.length).toBe(0);
+              }
+            }
+            //===
+            const groupType2 = groupTypesConnection.nodes[2];
+            expect(groupType2.name).toBe(groupTypeName2);
+
+            expect(groupType2.movieGroups).not.toBeNull();
+
+            if (groupType2.movieGroups) {
+              expect(groupType2.movieGroups.nodes).not.toBeNull();
+
+              if (groupType2.movieGroups.nodes) {
+                expect(groupType2.movieGroups.nodes.length).toBe(0);
+              }
+            }
+          }
+        }
+      });
+
+      test("Move a group of movies to group type", async () => {
+        const result = await testServer.executeOperation({
+          query:
+            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+            }`,
+          variables: {
+            _gid: groupResult2.data?.addMovieGroup, // "Stephen King"
+            _tid: groupTypeResult2.data?.addGroupType, // "Writer"
+          },
+        });
+  
+        expect(result.errors).toBeUndefined();
+        expect(result.data?.moveMovieGroup2Type).toBe(true);
+      });
+
+      test("Move a group of movies to group type", async () => {
+        const result = await testServer.executeOperation({
+          query:
+            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+            }`,
+          variables: {
+            _gid: groupResult3.data?.addMovieGroup, // "Horror"
+            _tid: groupTypeResult3.data?.addGroupType, // "Genre"
+          },
+        });
+  
+        expect(result.errors).toBeUndefined();
+        expect(result.data?.moveMovieGroup2Type).toBe(true);
+      });
+
+      test("Move a group of movies to group type", async () => {
+        const result = await testServer.executeOperation({
+          query:
+            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+            }`,
+          variables: {
+            _gid: groupResult4.data?.addMovieGroup, // "Sci-Fi"
+            _tid: groupTypeResult3.data?.addGroupType, // "Genre"
+          },
+        });
+  
+        expect(result.errors).toBeUndefined();
+        expect(result.data?.moveMovieGroup2Type).toBe(true);
+      });  
+
+      test("Getting all group types", async () => {
+        const result2 = await testServer.executeOperation({
+          query: `query GetGroupTypes { 
+              groupTypes { 
+                nodes { 
+                  name 
+                  movieGroups { 
+                    nodes { 
+                      name 
+                    } 
+                  } 
+                } 
+              } 
+            }`,
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const groupTypesConnection = result2.data[
+            "groupTypes"
+          ] as IConnection<Partial<IGroupType>>;
+          expect(groupTypesConnection.nodes).not.toBeNull();
+
+          if (groupTypesConnection.nodes) {
+            expect(groupTypesConnection.nodes.length).toBe(3);
+
+            const groupType0 = groupTypesConnection.nodes[0];
+            expect(groupType0.name).toBe(groupTypeName);
+
+            expect(groupType0.movieGroups).not.toBeNull();
+
+            if (groupType0.movieGroups) {
+              expect(groupType0.movieGroups.nodes).not.toBeNull();
+
+              if (groupType0.movieGroups.nodes) {
+                expect(groupType0.movieGroups.nodes.length).toBe(1);
+
+                const movieGroups = groupType0.movieGroups.nodes;
+
+                const movieGroup0 = movieGroups[0];
+                expect(movieGroup0.name).toBe(groupName);              
+              }
+            }
+            //===
+            const groupType1 = groupTypesConnection.nodes[1];
+            expect(groupType1.name).toBe(groupTypeName3);
+
+            expect(groupType1.movieGroups).not.toBeNull();
+
+            if (groupType1.movieGroups) {
+              expect(groupType1.movieGroups.nodes).not.toBeNull();
+
+              if (groupType1.movieGroups.nodes) {
+                expect(groupType1.movieGroups.nodes.length).toBe(2);
+
+                const movieGroups = groupType1.movieGroups.nodes;
+
+                const movieGroup0 = movieGroups[0];
+                expect(movieGroup0.name).toBe(groupName3);              
+                //===
+                const movieGroup1 = movieGroups[1];
+                expect(movieGroup1.name).toBe(groupName4);              
+              }
+            }
+            //===
+            const groupType2 = groupTypesConnection.nodes[2];
+            expect(groupType2.name).toBe(groupTypeName2);
+
+            expect(groupType2.movieGroups).not.toBeNull();
+
+            if (groupType2.movieGroups) {
+              expect(groupType2.movieGroups.nodes).not.toBeNull();
+
+              if (groupType2.movieGroups.nodes) {
+                expect(groupType2.movieGroups.nodes.length).toBe(1);
+
+                const movieGroups = groupType2.movieGroups.nodes;
+
+                const movieGroup0 = movieGroups[0];
+                expect(movieGroup0.name).toBe(groupName2);              
+              }
+            }
+          }
+        }
+      });
+
+      test("Move a group of movies to group type", async () => {
+        const result = await testServer.executeOperation({
+          query:
+            `mutation RemoveMovieGroupFromType($_gid: ID!) { 
+              removeMovieGroupFromType(_gid: $_gid) 
+            }`,
+          variables: {
+            _gid: groupResult4.data?.addMovieGroup, // "Sci-Fi"
+          },
+        });
+  
+        expect(result.errors).toBeUndefined();
+        expect(result.data?.removeMovieGroupFromType).toBe(true);
+      });  
+
+
+      test("Getting all group types", async () => {
+        const result2 = await testServer.executeOperation({
+          query: `query GetGroupTypes { 
+              groupTypes { 
+                nodes { 
+                  name 
+                  movieGroups { 
+                    nodes { 
+                      name 
+                    } 
+                  } 
+                } 
+              } 
+            }`,
+        });
+
+        expect(result2.data).toBeTruthy();
+
+        if (result2.data) {
+          const groupTypesConnection = result2.data[
+            "groupTypes"
+          ] as IConnection<Partial<IGroupType>>;
+          expect(groupTypesConnection.nodes).not.toBeNull();
+
+          if (groupTypesConnection.nodes) {
+            expect(groupTypesConnection.nodes.length).toBe(3);
+
+            const groupType0 = groupTypesConnection.nodes[0];
+            expect(groupType0.name).toBe(groupTypeName);
+
+            expect(groupType0.movieGroups).not.toBeNull();
+
+            if (groupType0.movieGroups) {
+              expect(groupType0.movieGroups.nodes).not.toBeNull();
+
+              if (groupType0.movieGroups.nodes) {
+                expect(groupType0.movieGroups.nodes.length).toBe(1);
+
+                const movieGroups = groupType0.movieGroups.nodes;
+
+                const movieGroup0 = movieGroups[0];
+                expect(movieGroup0.name).toBe(groupName);              
+              }
+            }
+            //===
+            const groupType1 = groupTypesConnection.nodes[1];
+            expect(groupType1.name).toBe(groupTypeName3);
+
+            expect(groupType1.movieGroups).not.toBeNull();
+
+            if (groupType1.movieGroups) {
+              expect(groupType1.movieGroups.nodes).not.toBeNull();
+
+              if (groupType1.movieGroups.nodes) {
+                expect(groupType1.movieGroups.nodes.length).toBe(1);
+
+                const movieGroups = groupType1.movieGroups.nodes;
+
+                const movieGroup0 = movieGroups[0];
+                expect(movieGroup0.name).toBe(groupName3);              
+              }
+            }
+            //===
+            const groupType2 = groupTypesConnection.nodes[2];
+            expect(groupType2.name).toBe(groupTypeName2);
+
+            expect(groupType2.movieGroups).not.toBeNull();
+
+            if (groupType2.movieGroups) {
+              expect(groupType2.movieGroups.nodes).not.toBeNull();
+
+              if (groupType2.movieGroups.nodes) {
+                expect(groupType2.movieGroups.nodes.length).toBe(1);
+
+                const movieGroups = groupType2.movieGroups.nodes;
+
+                const movieGroup0 = movieGroups[0];
+                expect(movieGroup0.name).toBe(groupName2);              
+              }
+            }
+          }
+        }
+      });
+
+    });
+
+    /*
+      const groupTypeName = "Director";
+      const groupTypeName2 = "Writer";
+      const groupTypeName3 = "Genre";
+      //===
+      const groupName = "Ridley Scott";
+      const groupName2 = "Stephen King";
+      const groupName3 = "Horror";
+      const groupName4 = "Sci-Fi";
+*/
     /*
 test("", async () => {
 });

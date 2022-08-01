@@ -56,11 +56,41 @@ export const typeDefs = gql`
     playDate: String!
     studio: String
     protected: Boolean  
-    movieGroups: [MovieGroup!]!
+    movieGroups(first: Int, after: String, last: Int, before: String, offset: Int): MovieGroupsConnection!
   }
 
   type PositionedMovie {
-    movie: Movie!
+    _id: ID!
+    mediaFullPath: String!
+    title: String!
+    description: String
+    genre: String
+    length: BigInt                     
+    mediaType: Int!
+    mediaDuration: BigInt              
+    mediaSize: BigInt!
+    mediaRating: Int
+    mediaResume: BigInt
+    resolutionX: Int
+    resolutionY: Int
+    aspectRatioX: Int
+    aspectRatioY: Int
+    thumbnailResolutionX: Int
+    thumbnailResolutionY: Int
+    playCount: Int!
+    stereoType: String!
+    infoFilePath: String
+    isMovieFolder: Boolean
+    visible: Visibility!
+    orientation: Int
+    onlineInfoVisible: Int!
+    releaseDate: String!
+    addDate: String!
+    modifyDate: String!
+    playDate: String!
+    studio: String
+    protected: Boolean  
+    movieGroups(first: Int, after: String, last: Int, before: String, offset: Int): MovieGroupsConnection!
     listOrder: Int!
   }
 
@@ -68,7 +98,7 @@ export const typeDefs = gql`
     _id: ID!
     name: String!
     description: String
-    movieGroups: [MovieGroup!]!
+    movieGroups(first: Int, after: String, last: Int, before: String, offset: Int): GroupTypesConnection!
   }
 
   type MovieGroup {
@@ -83,12 +113,13 @@ export const typeDefs = gql`
     visible: Visibility!
     custom: String
     groupType: GroupType
-    movies: [PositionedMovie!]!
+    movies(first: Int, after: String, last: Int, before: String, offset: Int): PositionedMoviesConnection!
   }
 
   ${buildConnectionEdgeTypes("Movies", "Movie", "Movie")}
   ${buildConnectionEdgeTypes("MovieGroups", "MovieGroup", "MovieGroup")}
   ${buildConnectionEdgeTypes("GroupTypes", "GroupType", "GroupType")}
+  ${buildConnectionEdgeTypes("PositionedMovies", "PositionedMovie", "PositionedMovie")}
  
   type Query {
     movies(first: Int, after: String, last: Int, before: String, offset: Int): MoviesConnection!
@@ -146,20 +177,25 @@ export const typeDefs = gql`
     name: String
     description: String
   }
-
   type Mutation {
     # movies
-    addMovie(mediaFullPath: String!, movieInfo: MovieInfoInput!): ID!
+    addMovie(mediaFullPath: String!, gid: ID, listOrder: Int, movieInfo: MovieInfoInput!): ID!
     updateMovie(_id: ID!, movieInfo: MovieInfoInput!): Boolean!
     deleteMovie(_id: ID!): Boolean!
     # movie groups
-    addMovieGroup(movieGroupInfo: MovieGroupInfoInput!): ID!
+    addMovieGroup(tid: ID, movieGroupInfo: MovieGroupInfoInput!): ID!
     updateMovieGroup(_id: ID!, movieGroupInfo: MovieGroupInfoInput!): Boolean!
     deleteMovieGroup(_id: ID!): Boolean!
     # group types
     addGroupType(groupTypeInfo: GroupTypeInfoInput!): ID!
     updateGroupType(_id: ID!, groupTypeInfo: GroupTypeInfoInput!): Boolean!
     deleteGroupType(_id: ID!): Boolean!
+    # movie groups & movies
+    associateMovieAndMovieGroup(_mid: ID!, _gid: ID!, listOrder: Int): Boolean!
+    unassociateMovieAndMovieGroup(_mid: ID!, _gid: ID!): Boolean!
+    # group types & movie groups
+    moveMovieGroup2Type(_gid: ID!, _tid: ID!): Boolean!
+    removeMovieGroupFromType(_gid: ID!): Boolean!
   }
 `;
 
