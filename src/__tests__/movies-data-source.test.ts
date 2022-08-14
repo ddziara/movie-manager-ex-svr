@@ -9,6 +9,7 @@ import type { DB } from "../database/db-db";
 import { convertStringCase, StringCaseMode } from "../database/utils";
 import type { DBDataMovieManagerCyberlink } from "../database/db-data-moviemanager-cyberlink";
 import { IPostgresRunReturn } from "../database/db-data-moviemanager-postgres";
+import { InMemoryLRUCache } from "apollo-server-caching";
 
 interface DBDataMovieManagerCyberlinkPublic {
   attachDBCreateTables(db: DB, dbpath: string): Promise<void>;
@@ -47,7 +48,8 @@ interface IPostgresRawExecRetIDPublic {
   ): Promise<Knex.Raw<IPostgresRunReturn>>;
 }
 
-jest.setTimeout(60000);
+jest.setTimeout(6000000);
+// ${"cyberlink"}
 
 describe.each`
   appPlatform
@@ -64,8 +66,12 @@ describe.each`
     let convertReportedColumnName: (txt: string) => string;
 
     // ignore "cyberlink" tests on "postgres" platform
-    const APP_PLATFORM = process.env["APP_PLATFORM"] as AppPlatformType
-    if (APP_PLATFORM === "postgres" && appPlatform as AppPlatformType === "cyberlink") return;
+    const APP_PLATFORM = process.env["APP_PLATFORM"] as AppPlatformType;
+    if (
+      APP_PLATFORM === "postgres" &&
+      (appPlatform as AppPlatformType) === "cyberlink"
+    )
+      return;
 
     beforeAll(async () => {
       jest.doMock("../database/db-const", () => {
@@ -181,7 +187,7 @@ describe.each`
           },
           useNullAsDefault: true,
         });
-        
+
         const { DBDataMovieManagerCyberlink } = await import(
           "../database/db-data-moviemanager-cyberlink"
         );
@@ -206,28 +212,8 @@ describe.each`
           DBDataMovieManagerPostgres
         );
 
-        // remove database content
         await moviesDataSource.init();
-
-        let tab;
-        const dbDataMovieManager = moviesDataSource["_dbDataMovieManager"];
-
-        let indx = 0;
-        while((tab = dbDataMovieManager.dbcldb.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
-        //==
-        indx = 0;
-        while((tab = dbDataMovieManager.dbextra.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
-        //==
-        indx = 0;
-        while((tab = dbDataMovieManager.dbmediaScannerCache.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
-        //==
-        indx = 0;
-        while((tab = dbDataMovieManager.dbmoviemedia.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
-        //==
-        indx = 0;
-        while((tab = dbDataMovieManager.dbplaylist.getTable(indx++)) != null) await dbDataMovieManager.clearTable(tab);
-
-        //==
+        await moviesDataSource.clearTables();
         await moviesDataSource.uninit();
       }
     });
@@ -235,9 +221,9 @@ describe.each`
     afterEach(async () => {
       if (appPlatform === "postgres") {
         // to forcibly disconnet clients
-        await moviesDataSource["knex"].destroy();      
+        await moviesDataSource["knex"].destroy();
       }
-    })
+    });
 
     test("checking initialization and uninitialization", async () => {
       await moviesDataSource.init();
@@ -773,6 +759,7 @@ describe.each`
         const knex = knx({
           client: "better-sqlite3",
           connection: { filename: ":memory:" },
+          useNullAsDefault: true,
         });
         const { DBDataMovieManagerCyberlink } = await import(
           "../database/db-data-moviemanager-cyberlink"
@@ -782,10 +769,10 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
-          const dBName = "CLDB";
-          const errMsg = `openning ${dBName} exception`;
+        const dBName = "CLDB";
+        const errMsg = `openning ${dBName} exception`;
 
-          const mocked = jest
+        const mocked = jest
           .spyOn(
             dbDataMovieManagerWindows as unknown as DBDataMovieManagerCyberlinkPublic,
             "attachDBCreateTables"
@@ -802,9 +789,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
       });
@@ -814,6 +799,7 @@ describe.each`
         const knex = knx({
           client: "better-sqlite3",
           connection: { filename: ":memory:" },
+          useNullAsDefault: true,
         });
         const { DBDataMovieManagerCyberlink } = await import(
           "../database/db-data-moviemanager-cyberlink"
@@ -823,8 +809,8 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
-          const dBName = "moviemedia";
-          const errMsg = `openning ${dBName} exception`;
+        const dBName = "moviemedia";
+        const errMsg = `openning ${dBName} exception`;
 
         const mocked = jest
           .spyOn(
@@ -843,9 +829,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
       });
@@ -855,6 +839,7 @@ describe.each`
         const knex = knx({
           client: "better-sqlite3",
           connection: { filename: ":memory:" },
+          useNullAsDefault: true,
         });
         const { DBDataMovieManagerCyberlink } = await import(
           "../database/db-data-moviemanager-cyberlink"
@@ -864,8 +849,8 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
-          const dBName = "mediaScannerCache";
-          const errMsg = `openning ${dBName} exception`;
+        const dBName = "mediaScannerCache";
+        const errMsg = `openning ${dBName} exception`;
 
         const mocked = jest
           .spyOn(
@@ -884,9 +869,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
       });
@@ -896,6 +879,7 @@ describe.each`
         const knex = knx({
           client: "better-sqlite3",
           connection: { filename: ":memory:" },
+          useNullAsDefault: true,
         });
         const { DBDataMovieManagerCyberlink } = await import(
           "../database/db-data-moviemanager-cyberlink"
@@ -905,8 +889,8 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
-          const dBName = "Playlist";
-          const errMsg = `openning ${dBName} exception`;
+        const dBName = "Playlist";
+        const errMsg = `openning ${dBName} exception`;
 
         const mocked = jest
           .spyOn(
@@ -925,9 +909,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
       });
@@ -937,6 +919,7 @@ describe.each`
         const knex = knx({
           client: "better-sqlite3",
           connection: { filename: ":memory:" },
+          useNullAsDefault: true,
         });
         const { DBDataMovieManagerCyberlink } = await import(
           "../database/db-data-moviemanager-cyberlink"
@@ -946,8 +929,8 @@ describe.each`
         const attachDBCreateTablesOrg =
           dbDataMovieManagerWindows["attachDBCreateTables"];
 
-          const dBName = "Playlist";
-          const errMsg = `openning ${dBName} exception`;
+        const dBName = "Playlist";
+        const errMsg = `openning ${dBName} exception`;
 
         const mocked = jest
           .spyOn(
@@ -966,9 +949,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerWindows.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
       });
@@ -1029,7 +1010,9 @@ describe.each`
         const { DBDataMovieManagerPostgres } = await import(
           "../database/db-data-moviemanager-postgres"
         );
-        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(
+          knexPostgres
+        );
 
         const createSchemaCreateTablesOrg =
           dbDataMovieManagerPostgres["createSchemaCreateTables"];
@@ -1053,9 +1036,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
         knexPostgres.destroy();
@@ -1070,7 +1051,9 @@ describe.each`
         const { DBDataMovieManagerPostgres } = await import(
           "../database/db-data-moviemanager-postgres"
         );
-        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(
+          knexPostgres
+        );
 
         const createSchemaCreateTablesOrg =
           dbDataMovieManagerPostgres["createSchemaCreateTables"];
@@ -1094,9 +1077,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
         knexPostgres.destroy();
@@ -1111,7 +1092,9 @@ describe.each`
         const { DBDataMovieManagerPostgres } = await import(
           "../database/db-data-moviemanager-postgres"
         );
-        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(
+          knexPostgres
+        );
 
         const createSchemaCreateTablesOrg =
           dbDataMovieManagerPostgres["createSchemaCreateTables"];
@@ -1135,9 +1118,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
         knexPostgres.destroy();
@@ -1152,7 +1133,9 @@ describe.each`
         const { DBDataMovieManagerPostgres } = await import(
           "../database/db-data-moviemanager-postgres"
         );
-        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(
+          knexPostgres
+        );
 
         const createSchemaCreateTablesOrg =
           dbDataMovieManagerPostgres["createSchemaCreateTables"];
@@ -1176,9 +1159,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
         knexPostgres.destroy();
@@ -1193,7 +1174,9 @@ describe.each`
         const { DBDataMovieManagerPostgres } = await import(
           "../database/db-data-moviemanager-postgres"
         );
-        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(knexPostgres);
+        const dbDataMovieManagerPostgres = new DBDataMovieManagerPostgres(
+          knexPostgres
+        );
 
         const createSchemaCreateTablesOrg =
           dbDataMovieManagerPostgres["createSchemaCreateTables"];
@@ -1217,9 +1200,7 @@ describe.each`
             );
           });
 
-        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(
-          errMsg
-        );
+        await expect(dbDataMovieManagerPostgres.init()).rejects.toThrow(errMsg);
 
         mocked.mockRestore();
         knexPostgres.destroy();
@@ -1364,20 +1345,10 @@ describe.each`
       );
       expect(result2.rows[0][convertReportedColumnName("gendid")]).toBe(tid);
 
-      // getting type group (non-existing typeid/existing groupid)
-      await expect(
-        moviesDataSource.getMovieGroups(tid + 1, gid)
-      ).rejects.toThrowError(`Missing group type: ${tid + 1}`);
-
       // getting type group (existing typeid/non-existing groupid)
       await expect(
-        moviesDataSource.getMovieGroups(tid, gid + 1)
+        moviesDataSource.getMovieGroups(undefined, gid + 1)
       ).rejects.toThrowError(`Missing group: ${gid + 1}`);
-
-      // getting type group (non-existing typeid/non-existing groupid)
-      await expect(
-        moviesDataSource.getMovieGroups(tid + 1, gid + 1)
-      ).rejects.toThrowError(`Missing group type: ${tid + 1}`);
 
       // getting type group (existing typeid)
       const result3 = await moviesDataSource.getMovieGroups(tid, undefined);
@@ -1400,7 +1371,7 @@ describe.each`
       expect(gid2).toBeGreaterThanOrEqual(1);
 
       // getting type group (existing typeid/existing groupid)
-      const result4 = await moviesDataSource.getMovieGroups(0, gid2);
+      const result4 = await moviesDataSource.getMovieGroups(undefined, gid2);
       expect(result4.total_count).toBe(1);
       expect(result4.rows[0][convertReportedColumnName("_id")]).toBe(gid2);
       expect(result4.rows[0][convertReportedColumnName("name")]).toBe(
@@ -1419,7 +1390,7 @@ describe.each`
       ).resolves.toBeUndefined();
 
       // getting type group (existing typeid/existing groupid)
-      const result5 = await moviesDataSource.getMovieGroups(0, gid);
+      const result5 = await moviesDataSource.getMovieGroups(undefined, gid);
       expect(result5.total_count).toBe(1);
       expect(result5.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result5.rows[0][convertReportedColumnName("name")]).toBe(
@@ -1440,8 +1411,8 @@ describe.each`
         moviesDataSource.moveMovieGroup2AnotherType(gid, tid2)
       ).resolves.toBeUndefined();
 
-      // getting type group (existing typeid/existing groupid)
-      const result6 = await moviesDataSource.getMovieGroups(tid2, gid);
+      // getting type group (existing groupid)
+      const result6 = await moviesDataSource.getMovieGroups(undefined, gid);
       expect(result6.total_count).toBe(1);
       expect(result6.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result6.rows[0][convertReportedColumnName("name")]).toBe(
@@ -1459,8 +1430,8 @@ describe.each`
         moviesDataSource.moveMovieGroup2NoType(0, gid)
       ).resolves.toBeUndefined();
 
-      // getting type group (existing typeid/existing groupid)
-      const result7 = await moviesDataSource.getMovieGroups(0, gid);
+      // getting type group (existing groupid)
+      const result7 = await moviesDataSource.getMovieGroups(undefined, gid);
       expect(result7.total_count).toBe(1);
       expect(result7.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result7.rows[0][convertReportedColumnName("name")]).toBe(
@@ -1474,7 +1445,7 @@ describe.each`
       ).resolves.toBeUndefined();
 
       // getting type group (existing typeid/existing groupid)
-      const result8 = await moviesDataSource.getMovieGroups(tid2, gid);
+      const result8 = await moviesDataSource.getMovieGroups(undefined, gid);
       expect(result8.total_count).toBe(1);
       expect(result8.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result8.rows[0][convertReportedColumnName("name")]).toBe(
@@ -1703,315 +1674,317 @@ describe.each`
       expect(result4.rows[0][convertReportedColumnName("gendid")]).toBeNull();
     });
 
-    test(`checking getting movie groups with paging`, async () => {
-      await moviesDataSource.init();
-      expect(moviesDataSource.ready).toBeTruthy();
+    // Warning: Do not remove paging test 'cause it may be used in the future
+    //
+    // test(`checking getting movie groups with paging`, async () => {
+    //   await moviesDataSource.init();
+    //   expect(moviesDataSource.ready).toBeTruthy();
 
-      const column_names = ["name", "description"];
-      const column_values = ["Genres", "Movie Genres"];
-      const tid1 = await moviesDataSource.addMovieGroupType(
-        column_names,
-        column_values
-      );
-      expect(tid1).toBeGreaterThanOrEqual(1);
-      //==
-      const column_names2 = ["name", "description"];
-      const column_values2 = ["People", "Directors, Writers"];
-      const tid2 = await moviesDataSource.addMovieGroupType(
-        column_names2,
-        column_values2
-      );
-      expect(tid2).toBeGreaterThanOrEqual(1);
+    //   const column_names = ["name", "description"];
+    //   const column_values = ["Genres", "Movie Genres"];
+    //   const tid1 = await moviesDataSource.addMovieGroupType(
+    //     column_names,
+    //     column_values
+    //   );
+    //   expect(tid1).toBeGreaterThanOrEqual(1);
+    //   //==
+    //   const column_names2 = ["name", "description"];
+    //   const column_values2 = ["People", "Directors, Writers"];
+    //   const tid2 = await moviesDataSource.addMovieGroupType(
+    //     column_names2,
+    //     column_values2
+    //   );
+    //   expect(tid2).toBeGreaterThanOrEqual(1);
 
-      // //========================================================================================================
-      const column_names3 = ["name"];
-      const column_values3 = ["Cinema (Action)"];
-      const gid = await moviesDataSource.addMovieGroup(
-        tid1,
-        undefined,
-        column_names3,
-        column_values3
-      );
-      expect(gid).toBeGreaterThanOrEqual(1);
+    //   // //========================================================================================================
+    //   const column_names3 = ["name"];
+    //   const column_values3 = ["Cinema (Action)"];
+    //   const gid = await moviesDataSource.addMovieGroup(
+    //     tid1,
+    //     undefined,
+    //     column_names3,
+    //     column_values3
+    //   );
+    //   expect(gid).toBeGreaterThanOrEqual(1);
 
-      // //========================================================================================================
-      const column_names4 = ["name"];
-      const column_values4 = ["Cinema (Adventure)"];
-      const gid2 = await moviesDataSource.addMovieGroup(
-        tid1,
-        undefined,
-        column_names4,
-        column_values4
-      );
-      expect(gid2).toBeGreaterThanOrEqual(1);
+    //   // //========================================================================================================
+    //   const column_names4 = ["name"];
+    //   const column_values4 = ["Cinema (Adventure)"];
+    //   const gid2 = await moviesDataSource.addMovieGroup(
+    //     tid1,
+    //     undefined,
+    //     column_names4,
+    //     column_values4
+    //   );
+    //   expect(gid2).toBeGreaterThanOrEqual(1);
 
-      // //========================================================================================================
-      const column_names5 = ["name"];
-      const column_values5 = ["Cinema (Crime)"];
-      const gid3 = await moviesDataSource.addMovieGroup(
-        tid1,
-        undefined,
-        column_names5,
-        column_values5
-      );
-      expect(gid3).toBeGreaterThanOrEqual(1);
+    //   // //========================================================================================================
+    //   const column_names5 = ["name"];
+    //   const column_values5 = ["Cinema (Crime)"];
+    //   const gid3 = await moviesDataSource.addMovieGroup(
+    //     tid1,
+    //     undefined,
+    //     column_names5,
+    //     column_values5
+    //   );
+    //   expect(gid3).toBeGreaterThanOrEqual(1);
 
-      // //========================================================================================================
-      const column_names6 = ["name"];
-      const column_values6 = ["Cinema (Scott Ridley)"];
-      const gid4 = await moviesDataSource.addMovieGroup(
-        tid2,
-        undefined,
-        column_names6,
-        column_values6
-      );
-      expect(gid4).toBeGreaterThanOrEqual(1);
+    //   // //========================================================================================================
+    //   const column_names6 = ["name"];
+    //   const column_values6 = ["Cinema (Scott Ridley)"];
+    //   const gid4 = await moviesDataSource.addMovieGroup(
+    //     tid2,
+    //     undefined,
+    //     column_names6,
+    //     column_values6
+    //   );
+    //   expect(gid4).toBeGreaterThanOrEqual(1);
 
-      // //========================================================================================================
-      const column_names7 = ["name"];
-      const column_values7 = ["Cinema (Mel Gibson)"];
-      const gid5 = await moviesDataSource.addMovieGroup(
-        tid2,
-        undefined,
-        column_names7,
-        column_values7
-      );
-      expect(gid5).toBeGreaterThanOrEqual(1);
+    //   // //========================================================================================================
+    //   const column_names7 = ["name"];
+    //   const column_values7 = ["Cinema (Mel Gibson)"];
+    //   const gid5 = await moviesDataSource.addMovieGroup(
+    //     tid2,
+    //     undefined,
+    //     column_names7,
+    //     column_values7
+    //   );
+    //   expect(gid5).toBeGreaterThanOrEqual(1);
 
-      // //========================================================================================================
-      const column_names8 = ["name"];
-      const column_values8 = ["Cinema (Star Wars)"];
-      const gid6 = await moviesDataSource.addMovieGroup(
-        undefined,
-        undefined,
-        column_names8,
-        column_values8
-      );
-      expect(gid6).toBeGreaterThanOrEqual(1);
+    //   // //========================================================================================================
+    //   const column_names8 = ["name"];
+    //   const column_values8 = ["Cinema (Star Wars)"];
+    //   const gid6 = await moviesDataSource.addMovieGroup(
+    //     undefined,
+    //     undefined,
+    //     column_names8,
+    //     column_values8
+    //   );
+    //   expect(gid6).toBeGreaterThanOrEqual(1);
 
-      // //========================================================================================================
-      // Note: this is sorted alphabetically
-      const result1 = await moviesDataSource.getMovieGroups(
-        undefined,
-        undefined,
-        undefined,
-        5,
-        undefined,
-        undefined,
-        undefined,
-        undefined
-      );
-      expect(result1.rows.length).toBe(5);
-      expect(result1.rows[0][convertReportedColumnName("_id")]).toBe(gid);
-      expect(result1.rows[0][convertReportedColumnName("name")]).toBe(
-        column_values3[0]
-      );
-      expect(result1.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result1.rows[1][convertReportedColumnName("_id")]).toBe(gid2);
-      expect(result1.rows[1][convertReportedColumnName("name")]).toBe(
-        column_values4[0]
-      );
-      expect(result1.rows[1][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result1.rows[2][convertReportedColumnName("_id")]).toBe(gid3);
-      expect(result1.rows[2][convertReportedColumnName("name")]).toBe(
-        column_values5[0]
-      );
-      expect(result1.rows[2][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result1.rows[3][convertReportedColumnName("_id")]).toBe(gid5);
-      expect(result1.rows[3][convertReportedColumnName("name")]).toBe(
-        column_values7[0]
-      );
-      expect(result1.rows[3][convertReportedColumnName("gendid")]).toBe(tid2);
-      expect(result1.rows[4][convertReportedColumnName("_id")]).toBe(gid4);
-      expect(result1.rows[4][convertReportedColumnName("name")]).toBe(
-        column_values6[0]
-      );
-      expect(result1.rows[4][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   // //========================================================================================================
+    //   // Note: this is sorted alphabetically
+    //   const result1 = await moviesDataSource.getMovieGroups(
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     5,
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     undefined
+    //   );
+    //   expect(result1.rows.length).toBe(5);
+    //   expect(result1.rows[0][convertReportedColumnName("_id")]).toBe(gid);
+    //   expect(result1.rows[0][convertReportedColumnName("name")]).toBe(
+    //     column_values3[0]
+    //   );
+    //   expect(result1.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result1.rows[1][convertReportedColumnName("_id")]).toBe(gid2);
+    //   expect(result1.rows[1][convertReportedColumnName("name")]).toBe(
+    //     column_values4[0]
+    //   );
+    //   expect(result1.rows[1][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result1.rows[2][convertReportedColumnName("_id")]).toBe(gid3);
+    //   expect(result1.rows[2][convertReportedColumnName("name")]).toBe(
+    //     column_values5[0]
+    //   );
+    //   expect(result1.rows[2][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result1.rows[3][convertReportedColumnName("_id")]).toBe(gid5);
+    //   expect(result1.rows[3][convertReportedColumnName("name")]).toBe(
+    //     column_values7[0]
+    //   );
+    //   expect(result1.rows[3][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   expect(result1.rows[4][convertReportedColumnName("_id")]).toBe(gid4);
+    //   expect(result1.rows[4][convertReportedColumnName("name")]).toBe(
+    //     column_values6[0]
+    //   );
+    //   expect(result1.rows[4][convertReportedColumnName("gendid")]).toBe(tid2);
 
-      // //========================================================================================================
-      // Note: this is sorted alphabetically
-      const result2 = await moviesDataSource.getMovieGroups(
-        undefined,
-        undefined,
-        undefined,
-        5,
-        undefined,
-        undefined,
-        undefined,
-        1
-      );
-      expect(result2.rows.length).toBe(5);
-      expect(result2.rows[0][convertReportedColumnName("_id")]).toBe(gid2);
-      expect(result2.rows[0][convertReportedColumnName("name")]).toBe(
-        column_values4[0]
-      );
-      expect(result2.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result2.rows[1][convertReportedColumnName("_id")]).toBe(gid3);
-      expect(result2.rows[1][convertReportedColumnName("name")]).toBe(
-        column_values5[0]
-      );
-      expect(result2.rows[1][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result2.rows[2][convertReportedColumnName("_id")]).toBe(gid5);
-      expect(result2.rows[2][convertReportedColumnName("name")]).toBe(
-        column_values7[0]
-      );
-      expect(result2.rows[2][convertReportedColumnName("gendid")]).toBe(tid2);
-      expect(result2.rows[3][convertReportedColumnName("_id")]).toBe(gid4);
-      expect(result2.rows[3][convertReportedColumnName("name")]).toBe(
-        column_values6[0]
-      );
-      expect(result2.rows[3][convertReportedColumnName("gendid")]).toBe(tid2);
-      expect(result2.rows[4][convertReportedColumnName("_id")]).toBe(gid6);
-      expect(result2.rows[4][convertReportedColumnName("name")]).toBe(
-        column_values8[0]
-      );
-      expect(result2.rows[4][convertReportedColumnName("gendid")]).toBeNull();
+    //   // //========================================================================================================
+    //   // Note: this is sorted alphabetically
+    //   const result2 = await moviesDataSource.getMovieGroups(
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     5,
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     1
+    //   );
+    //   expect(result2.rows.length).toBe(5);
+    //   expect(result2.rows[0][convertReportedColumnName("_id")]).toBe(gid2);
+    //   expect(result2.rows[0][convertReportedColumnName("name")]).toBe(
+    //     column_values4[0]
+    //   );
+    //   expect(result2.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result2.rows[1][convertReportedColumnName("_id")]).toBe(gid3);
+    //   expect(result2.rows[1][convertReportedColumnName("name")]).toBe(
+    //     column_values5[0]
+    //   );
+    //   expect(result2.rows[1][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result2.rows[2][convertReportedColumnName("_id")]).toBe(gid5);
+    //   expect(result2.rows[2][convertReportedColumnName("name")]).toBe(
+    //     column_values7[0]
+    //   );
+    //   expect(result2.rows[2][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   expect(result2.rows[3][convertReportedColumnName("_id")]).toBe(gid4);
+    //   expect(result2.rows[3][convertReportedColumnName("name")]).toBe(
+    //     column_values6[0]
+    //   );
+    //   expect(result2.rows[3][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   expect(result2.rows[4][convertReportedColumnName("_id")]).toBe(gid6);
+    //   expect(result2.rows[4][convertReportedColumnName("name")]).toBe(
+    //     column_values8[0]
+    //   );
+    //   expect(result2.rows[4][convertReportedColumnName("gendid")]).toBeNull();
 
-      // //========================================================================================================
-      // Note: this is sorted alphabetically
-      const result3 = await moviesDataSource.getMovieGroups(
-        undefined,
-        undefined,
-        undefined,
-        5,
-        undefined,
-        undefined,
-        undefined,
-        2
-      );
-      expect(result3.rows.length).toBe(4);
-      expect(result3.rows[0][convertReportedColumnName("_id")]).toBe(gid3);
-      expect(result3.rows[0][convertReportedColumnName("name")]).toBe(
-        column_values5[0]
-      );
-      expect(result3.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result3.rows[1][convertReportedColumnName("_id")]).toBe(gid5);
-      expect(result3.rows[1][convertReportedColumnName("name")]).toBe(
-        column_values7[0]
-      );
-      expect(result3.rows[1][convertReportedColumnName("gendid")]).toBe(tid2);
-      expect(result3.rows[2][convertReportedColumnName("_id")]).toBe(gid4);
-      expect(result3.rows[2][convertReportedColumnName("name")]).toBe(
-        column_values6[0]
-      );
-      expect(result3.rows[2][convertReportedColumnName("gendid")]).toBe(tid2);
-      expect(result3.rows[3][convertReportedColumnName("_id")]).toBe(gid6);
-      expect(result3.rows[3][convertReportedColumnName("name")]).toBe(
-        column_values8[0]
-      );
-      expect(result3.rows[3][convertReportedColumnName("gendid")]).toBeNull();
+    //   // //========================================================================================================
+    //   // Note: this is sorted alphabetically
+    //   const result3 = await moviesDataSource.getMovieGroups(
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     5,
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     2
+    //   );
+    //   expect(result3.rows.length).toBe(4);
+    //   expect(result3.rows[0][convertReportedColumnName("_id")]).toBe(gid3);
+    //   expect(result3.rows[0][convertReportedColumnName("name")]).toBe(
+    //     column_values5[0]
+    //   );
+    //   expect(result3.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result3.rows[1][convertReportedColumnName("_id")]).toBe(gid5);
+    //   expect(result3.rows[1][convertReportedColumnName("name")]).toBe(
+    //     column_values7[0]
+    //   );
+    //   expect(result3.rows[1][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   expect(result3.rows[2][convertReportedColumnName("_id")]).toBe(gid4);
+    //   expect(result3.rows[2][convertReportedColumnName("name")]).toBe(
+    //     column_values6[0]
+    //   );
+    //   expect(result3.rows[2][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   expect(result3.rows[3][convertReportedColumnName("_id")]).toBe(gid6);
+    //   expect(result3.rows[3][convertReportedColumnName("name")]).toBe(
+    //     column_values8[0]
+    //   );
+    //   expect(result3.rows[3][convertReportedColumnName("gendid")]).toBeNull();
 
-      // //========================================================================================================
-      // Note: this is sorted alphabetically
-      const result4 = await moviesDataSource.getMovieGroups(
-        undefined,
-        undefined,
-        undefined,
-        6,
-        undefined,
-        undefined,
-        undefined,
-        undefined
-      );
-      expect(result4.rows.length).toBe(6);
-      expect(result4.rows[0][convertReportedColumnName("_id")]).toBe(gid);
-      expect(result4.rows[0][convertReportedColumnName("name")]).toBe(
-        column_values3[0]
-      );
-      expect(result4.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result4.rows[1][convertReportedColumnName("_id")]).toBe(gid2);
-      expect(result4.rows[1][convertReportedColumnName("name")]).toBe(
-        column_values4[0]
-      );
-      expect(result4.rows[1][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result4.rows[2][convertReportedColumnName("_id")]).toBe(gid3);
-      expect(result4.rows[2][convertReportedColumnName("name")]).toBe(
-        column_values5[0]
-      );
-      expect(result4.rows[2][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result4.rows[3][convertReportedColumnName("_id")]).toBe(gid5);
-      expect(result4.rows[3][convertReportedColumnName("name")]).toBe(
-        column_values7[0]
-      );
-      expect(result4.rows[3][convertReportedColumnName("gendid")]).toBe(tid2);
-      expect(result4.rows[4][convertReportedColumnName("_id")]).toBe(gid4);
-      expect(result4.rows[4][convertReportedColumnName("name")]).toBe(
-        column_values6[0]
-      );
-      expect(result4.rows[4][convertReportedColumnName("gendid")]).toBe(tid2);
-      expect(result4.rows[5][convertReportedColumnName("_id")]).toBe(gid6);
-      expect(result4.rows[5][convertReportedColumnName("name")]).toBe(
-        column_values8[0]
-      );
-      expect(result4.rows[5][convertReportedColumnName("gendid")]).toBeNull();
+    //   // //========================================================================================================
+    //   // Note: this is sorted alphabetically
+    //   const result4 = await moviesDataSource.getMovieGroups(
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     6,
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     undefined
+    //   );
+    //   expect(result4.rows.length).toBe(6);
+    //   expect(result4.rows[0][convertReportedColumnName("_id")]).toBe(gid);
+    //   expect(result4.rows[0][convertReportedColumnName("name")]).toBe(
+    //     column_values3[0]
+    //   );
+    //   expect(result4.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result4.rows[1][convertReportedColumnName("_id")]).toBe(gid2);
+    //   expect(result4.rows[1][convertReportedColumnName("name")]).toBe(
+    //     column_values4[0]
+    //   );
+    //   expect(result4.rows[1][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result4.rows[2][convertReportedColumnName("_id")]).toBe(gid3);
+    //   expect(result4.rows[2][convertReportedColumnName("name")]).toBe(
+    //     column_values5[0]
+    //   );
+    //   expect(result4.rows[2][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result4.rows[3][convertReportedColumnName("_id")]).toBe(gid5);
+    //   expect(result4.rows[3][convertReportedColumnName("name")]).toBe(
+    //     column_values7[0]
+    //   );
+    //   expect(result4.rows[3][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   expect(result4.rows[4][convertReportedColumnName("_id")]).toBe(gid4);
+    //   expect(result4.rows[4][convertReportedColumnName("name")]).toBe(
+    //     column_values6[0]
+    //   );
+    //   expect(result4.rows[4][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   expect(result4.rows[5][convertReportedColumnName("_id")]).toBe(gid6);
+    //   expect(result4.rows[5][convertReportedColumnName("name")]).toBe(
+    //     column_values8[0]
+    //   );
+    //   expect(result4.rows[5][convertReportedColumnName("gendid")]).toBeNull();
 
-      // //========================================================================================================
-      // Note: this is sorted alphabetically
-      const result5 = await moviesDataSource.getMovieGroups(
-        tid1,
-        undefined,
-        undefined,
-        2,
-        undefined,
-        undefined,
-        undefined,
-        undefined
-      );
-      expect(result5.rows.length).toBe(2);
-      expect(result5.rows[0][convertReportedColumnName("_id")]).toBe(gid);
-      expect(result5.rows[0][convertReportedColumnName("name")]).toBe(
-        column_values3[0]
-      );
-      expect(result5.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
-      expect(result5.rows[1][convertReportedColumnName("_id")]).toBe(gid2);
-      expect(result5.rows[1][convertReportedColumnName("name")]).toBe(
-        column_values4[0]
-      );
-      expect(result5.rows[1][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   // //========================================================================================================
+    //   // Note: this is sorted alphabetically
+    //   const result5 = await moviesDataSource.getMovieGroups(
+    //     tid1,
+    //     undefined,
+    //     undefined,
+    //     2,
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     undefined
+    //   );
+    //   expect(result5.rows.length).toBe(2);
+    //   expect(result5.rows[0][convertReportedColumnName("_id")]).toBe(gid);
+    //   expect(result5.rows[0][convertReportedColumnName("name")]).toBe(
+    //     column_values3[0]
+    //   );
+    //   expect(result5.rows[0][convertReportedColumnName("gendid")]).toBe(tid1);
+    //   expect(result5.rows[1][convertReportedColumnName("_id")]).toBe(gid2);
+    //   expect(result5.rows[1][convertReportedColumnName("name")]).toBe(
+    //     column_values4[0]
+    //   );
+    //   expect(result5.rows[1][convertReportedColumnName("gendid")]).toBe(tid1);
 
-      // //========================================================================================================
-      // Note: this is sorted alphabetically
-      const result6 = await moviesDataSource.getMovieGroups(
-        tid2,
-        undefined,
-        undefined,
-        2,
-        undefined,
-        undefined,
-        undefined,
-        undefined
-      );
-      expect(result6.rows.length).toBe(2);
-      expect(result6.rows[0][convertReportedColumnName("_id")]).toBe(gid5);
-      expect(result6.rows[0][convertReportedColumnName("name")]).toBe(
-        column_values7[0]
-      );
-      expect(result6.rows[0][convertReportedColumnName("gendid")]).toBe(tid2);
-      expect(result6.rows[1][convertReportedColumnName("_id")]).toBe(gid4);
-      expect(result6.rows[1][convertReportedColumnName("name")]).toBe(
-        column_values6[0]
-      );
-      expect(result6.rows[1][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   // //========================================================================================================
+    //   // Note: this is sorted alphabetically
+    //   const result6 = await moviesDataSource.getMovieGroups(
+    //     tid2,
+    //     undefined,
+    //     undefined,
+    //     2,
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     undefined
+    //   );
+    //   expect(result6.rows.length).toBe(2);
+    //   expect(result6.rows[0][convertReportedColumnName("_id")]).toBe(gid5);
+    //   expect(result6.rows[0][convertReportedColumnName("name")]).toBe(
+    //     column_values7[0]
+    //   );
+    //   expect(result6.rows[0][convertReportedColumnName("gendid")]).toBe(tid2);
+    //   expect(result6.rows[1][convertReportedColumnName("_id")]).toBe(gid4);
+    //   expect(result6.rows[1][convertReportedColumnName("name")]).toBe(
+    //     column_values6[0]
+    //   );
+    //   expect(result6.rows[1][convertReportedColumnName("gendid")]).toBe(tid2);
 
-      // //========================================================================================================
-      // Note: this is sorted alphabetically
-      const result7 = await moviesDataSource.getMovieGroups(
-        0,
-        undefined,
-        undefined,
-        2,
-        undefined,
-        undefined,
-        undefined,
-        undefined
-      );
-      expect(result7.rows.length).toBe(1);
-      expect(result7.rows[0][convertReportedColumnName("_id")]).toBe(gid6);
-      expect(result7.rows[0][convertReportedColumnName("name")]).toBe(
-        column_values8[0]
-      );
-      expect(result7.rows[0][convertReportedColumnName("gendid")]).toBeNull();
-    });
+    //   // //========================================================================================================
+    //   // Note: this is sorted alphabetically
+    //   const result7 = await moviesDataSource.getMovieGroups(
+    //     0,
+    //     undefined,
+    //     undefined,
+    //     2,
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     undefined
+    //   );
+    //   expect(result7.rows.length).toBe(1);
+    //   expect(result7.rows[0][convertReportedColumnName("_id")]).toBe(gid6);
+    //   expect(result7.rows[0][convertReportedColumnName("name")]).toBe(
+    //     column_values8[0]
+    //   );
+    //   expect(result7.rows[0][convertReportedColumnName("gendid")]).toBeNull();
+    // });
 
     test(`checking adding/getting/updating/deleting type`, async () => {
       await moviesDataSource.init();
@@ -2219,7 +2192,15 @@ describe.each`
 
       //========================================================================================================
       // Note: rows are ordered alphabetically
-      const result = await moviesDataSource.getMovieGroupTypes(undefined, undefined, 2, undefined, undefined, undefined, 0);
+      const result = await moviesDataSource.getMovieGroupTypes(
+        undefined,
+        undefined,
+        2,
+        undefined,
+        undefined,
+        undefined,
+        0
+      );
       expect(result.rows.length).toBe(2);
       expect(result.rows[0][convertReportedColumnName("_id")]).toBe(tid);
       expect(result.rows[0][convertReportedColumnName("name")]).toBe(
@@ -2728,129 +2709,131 @@ describe.each`
       expect(result.total_count).toBe(0);
     });
 
-    test(`checking getting movies from given group with paging`, async () => {
-      await moviesDataSource.init();
-      expect(moviesDataSource.ready).toBeTruthy();
+    // Warning: Do not remove paging test 'cause it may be used in the future
+    //
+    // test(`checking getting movies from given group with paging`, async () => {
+    //   await moviesDataSource.init();
+    //   expect(moviesDataSource.ready).toBeTruthy();
 
-      // //========================================================================================================
-      const column_names = ["name"];
-      const column_values = ["Cinema (Horror)"];
-      const gid = await moviesDataSource.addMovieGroup(
-        undefined,
-        undefined,
-        column_names,
-        column_values
-      );
-      expect(gid).toBeGreaterThanOrEqual(1);
+    //   // //========================================================================================================
+    //   const column_names = ["name"];
+    //   const column_values = ["Cinema (Horror)"];
+    //   const gid = await moviesDataSource.addMovieGroup(
+    //     undefined,
+    //     undefined,
+    //     column_names,
+    //     column_values
+    //   );
+    //   expect(gid).toBeGreaterThanOrEqual(1);
 
-      // //========================================================================================================
-      const column_names2 = [`title`, `mediaFullPath`];
-      const column_values2 = [
-        "The Fog (1980)",
-        "C:\\Movies\\The.Fog.(1980).mkv",
-      ];
-      const mid = await moviesDataSource.addMovie(
-        gid,
-        undefined,
-        column_names2,
-        column_values2
-      );
-      expect(mid).toBe(`MOVIE_${column_values2[1]}`);
+    //   // //========================================================================================================
+    //   const column_names2 = [`title`, `mediaFullPath`];
+    //   const column_values2 = [
+    //     "The Fog (1980)",
+    //     "C:\\Movies\\The.Fog.(1980).mkv",
+    //   ];
+    //   const mid = await moviesDataSource.addMovie(
+    //     gid,
+    //     undefined,
+    //     column_names2,
+    //     column_values2
+    //   );
+    //   expect(mid).toBe(`MOVIE_${column_values2[1]}`);
 
-      // //========================================================================================================
-      const column_names3 = ["name"];
-      const column_values3 = ["Cinema (Comedy))"];
-      const gid2 = await moviesDataSource.addMovieGroup(
-        undefined,
-        undefined,
-        column_names3,
-        column_values3
-      );
-      expect(gid2).toBeGreaterThanOrEqual(1);
+    //   // //========================================================================================================
+    //   const column_names3 = ["name"];
+    //   const column_values3 = ["Cinema (Comedy))"];
+    //   const gid2 = await moviesDataSource.addMovieGroup(
+    //     undefined,
+    //     undefined,
+    //     column_names3,
+    //     column_values3
+    //   );
+    //   expect(gid2).toBeGreaterThanOrEqual(1);
 
-      //========================================================================================================
-      const column_names4 = [`title`, `mediaFullPath`];
-      const column_values4 = ["Shrek (2001)", "C:\\Movies\\Shrek.(2001).mvk"];
-      const mid2 = await moviesDataSource.addMovie(
-        gid2,
-        undefined,
-        column_names4,
-        column_values4
-      );
-      expect(mid2).toBe(`MOVIE_${column_values4[1]}`);
+    //   //========================================================================================================
+    //   const column_names4 = [`title`, `mediaFullPath`];
+    //   const column_values4 = ["Shrek (2001)", "C:\\Movies\\Shrek.(2001).mvk"];
+    //   const mid2 = await moviesDataSource.addMovie(
+    //     gid2,
+    //     undefined,
+    //     column_names4,
+    //     column_values4
+    //   );
+    //   expect(mid2).toBe(`MOVIE_${column_values4[1]}`);
 
-      //========================================================================================================
-      const folders = [`Lethal Weapon 3 (1992)`];
+    //   //========================================================================================================
+    //   const folders = [`Lethal Weapon 3 (1992)`];
 
-      const column_names5 = [`title`, `mediaFullPath`];
-      const column_values5 = [
-        `Lethal Weapon 3 (1992)`,
-        `C:\\Movies\\${folders[0]}\\Lethal.Weapon.3.(1992).mvk`,
-      ];
-      const mid3 = await moviesDataSource.addMovie(
-        gid2,
-        undefined,
-        column_names5,
-        column_values5
-      );
-      expect(mid3).toBe(`MOVIE_${column_values5[1]}`);
+    //   const column_names5 = [`title`, `mediaFullPath`];
+    //   const column_values5 = [
+    //     `Lethal Weapon 3 (1992)`,
+    //     `C:\\Movies\\${folders[0]}\\Lethal.Weapon.3.(1992).mvk`,
+    //   ];
+    //   const mid3 = await moviesDataSource.addMovie(
+    //     gid2,
+    //     undefined,
+    //     column_names5,
+    //     column_values5
+    //   );
+    //   expect(mid3).toBe(`MOVIE_${column_values5[1]}`);
 
-      //========================================================================================================
-      const folders2 = [`Lethal Weapon 3 (1992)`];
+    //   //========================================================================================================
+    //   const folders2 = [`Lethal Weapon 3 (1992)`];
 
-      const column_names6 = [`title`, `mediaFullPath`];
-      const column_values6 = [
-        `Lethal Weapon 4 (1998)`,
-        `C:\\Movies\\${folders2[0]}\\Lethal.Weapon.4.(1998).mvk`,
-      ];
-      const mid4 = await moviesDataSource.addMovie(
-        gid2,
-        undefined,
-        column_names6,
-        column_values6
-      );
-      expect(mid4).toBe(`MOVIE_${column_values6[1]}`);
+    //   const column_names6 = [`title`, `mediaFullPath`];
+    //   const column_values6 = [
+    //     `Lethal Weapon 4 (1998)`,
+    //     `C:\\Movies\\${folders2[0]}\\Lethal.Weapon.4.(1998).mvk`,
+    //   ];
+    //   const mid4 = await moviesDataSource.addMovie(
+    //     gid2,
+    //     undefined,
+    //     column_names6,
+    //     column_values6
+    //   );
+    //   expect(mid4).toBe(`MOVIE_${column_values6[1]}`);
 
-      //========================================================================================================
-      const result = await moviesDataSource.getMovies(
-        gid2,
-        undefined,
-        undefined,
-        2,
-        undefined,
-        undefined,
-        undefined,
-        1
-      );
-      expect(result.rows.length).toBe(2);
+    //   //========================================================================================================
+    //   const result = await moviesDataSource.getMovies(
+    //     gid2,
+    //     undefined,
+    //     undefined,
+    //     2,
+    //     undefined,
+    //     undefined,
+    //     undefined,
+    //     1
+    //   );
+    //   expect(result.rows.length).toBe(2);
 
-      expect(result.rows[0][convertReportedColumnName("_id")]).toBe(mid3);
-      expect(result.rows[0][convertReportedColumnName(`title`)]).toBe(
-        column_values5[0]
-      );
-      expect(result.rows[0][convertReportedColumnName(`mediaFullPath`)]).toBe(
-        column_values5[1]
-      );
-      expect(result.rows[0][convertReportedColumnName(`listOrder`)]).toBe(2);
-      //==
-      expect(result.rows[1][convertReportedColumnName("_id")]).toBe(mid4);
-      expect(result.rows[1][convertReportedColumnName(`title`)]).toBe(
-        column_values6[0]
-      );
-      expect(result.rows[1][convertReportedColumnName(`mediaFullPath`)]).toBe(
-        column_values6[1]
-      );
-      expect(result.rows[1][convertReportedColumnName(`listOrder`)]).toBe(3);
+    //   expect(result.rows[0][convertReportedColumnName("_id")]).toBe(mid3);
+    //   expect(result.rows[0][convertReportedColumnName(`title`)]).toBe(
+    //     column_values5[0]
+    //   );
+    //   expect(result.rows[0][convertReportedColumnName(`mediaFullPath`)]).toBe(
+    //     column_values5[1]
+    //   );
+    //   expect(result.rows[0][convertReportedColumnName(`listOrder`)]).toBe(2);
+    //   //==
+    //   expect(result.rows[1][convertReportedColumnName("_id")]).toBe(mid4);
+    //   expect(result.rows[1][convertReportedColumnName(`title`)]).toBe(
+    //     column_values6[0]
+    //   );
+    //   expect(result.rows[1][convertReportedColumnName(`mediaFullPath`)]).toBe(
+    //     column_values6[1]
+    //   );
+    //   expect(result.rows[1][convertReportedColumnName(`listOrder`)]).toBe(3);
 
-      if (dBConsts.USE_FOLDER_COLUMN_IN_MOVIES) {
-        expect(result.rows[0][convertReportedColumnName(`folder`)]).toBe(
-          folders[0]
-        );
-        expect(result.rows[1][convertReportedColumnName(`folder`)]).toBe(
-          folders2[0]
-        );
-      }
-    });
+    //   if (dBConsts.USE_FOLDER_COLUMN_IN_MOVIES) {
+    //     expect(result.rows[0][convertReportedColumnName(`folder`)]).toBe(
+    //       folders[0]
+    //     );
+    //     expect(result.rows[1][convertReportedColumnName(`folder`)]).toBe(
+    //       folders2[0]
+    //     );
+    //   }
+    // });
 
     test(`checking marking/unmarking movie a member of group`, async () => {
       await moviesDataSource.init();

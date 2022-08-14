@@ -369,13 +369,14 @@ export abstract class DBDataMovieManager extends DBData {
    * @param limit - numbers of rows to retrieve for paging; paging is used if both 'limit' and 'offset' are defined
    * @param offset - offset of rows to tetrieve for paging; paging is used if both 'limit' and 'offset' are defined
    * @param count_name - name of the counter window for paging; it can be empty
-   * @param with_clause - full WITH clause (example: WITH temptab AS (SELECT ...) )
+   * @param withClause - full WITH clause (example: WITH temptab AS (SELECT ...) )
+   * @returns
    */
   private getGetRowsCoreSql(
     table_names: string[],
     column_names: string[],
     cond_col_names: string[],
-    cond_col_values: (unknown | null)[],
+    cond_col_values: (unknown | (unknown | null)[] | null)[],
     join_conds: string[],
     extra_conds: string[],
     order_col_names: string[],
@@ -408,15 +409,50 @@ export abstract class DBDataMovieManager extends DBData {
     }
 
     const columns_list = this.names2StringList(column_names, ", ");
+    let paramIndex = 0;
 
     let cond = this.names2StringList(
       cond_col_names,
       " AND ",
       undefined,
       (s: string, indx: number, extra: unknown[]): string => {
-        return extra[indx]
-          ? `${s} = ${this.getSQLParameter(indx)}`
-          : `${s} IS NULL`;
+        let ret: string;
+
+        if (extra[indx]) {
+          if (typeof extra[indx] === "object" && extra[indx] instanceof Array) {
+            const arr = extra[indx] as undefined[];
+
+            if (arr.length > 0) {
+              // filter off falsy
+              const arr2 = arr.filter((val) => !!val);
+
+              if (arr2.length > 0) {
+                let p = this.getSQLParameter(paramIndex++);
+                const count = arr2.length;
+
+                for (let i = 1; i < count; i++) {
+                  p += `, ${this.getSQLParameter(paramIndex++)}`;
+                }
+
+                ret = `${s} IN (${p})`;
+
+                if (arr2.length < arr.length) {
+                  ret += ` OR ${s} IS NULL`;
+                }
+              } else {
+                ret = `${s} IS NULL`;
+              }
+            } else {
+              ret = "";
+            }
+          } else {
+            ret = `${s} = ${this.getSQLParameter(paramIndex++)}`;
+          }
+        } else {
+          ret = `${s} IS NULL`;
+        }
+
+        return ret;
       },
       cond_col_values
     );
@@ -458,17 +494,21 @@ export abstract class DBDataMovieManager extends DBData {
    * @param cond_col_names - array of column names to form condition
    * @param cond_col_values - array of condition column values
    * @param join_conds - array of conditions for joining tables: <table1> LEFT JOIN <table2> ON <join_cond1_2> ...
+   * @param extra_conds
+   * @param extra_cond_values
    * @param order_col_names - array of columns for ORDER BY clause
-   * @param bUseLeftJoin - indicates that LEFT JOIN should be used instead join conditions in WHERE clause
+   * @param join_separators
    * @param limit - numbers of rows to retrieve for paging
    * @param offset - offset of rows to tetrieve for paging
    * @param count_name - name of the counter window for paging
+   * @param withClause
+   * @returns
    */
   private async getRowsCore(
     table_names: string[],
     column_names: string[],
     cond_col_names: string[],
-    cond_col_values: (unknown | null)[],
+    cond_col_values: (unknown | (unknown | null)[] | null)[],
     join_conds: string[],
     extra_conds: string[],
     extra_cond_values: unknown[] | undefined,
@@ -503,13 +543,31 @@ export abstract class DBDataMovieManager extends DBData {
       }
     );
 
+    // handle null in nested arrays
+    const cond_col_values_wo_nulls2 = cond_col_values_wo_nulls.map(
+      (value: unknown) => {
+        if (typeof value === "object" && value instanceof Array) {
+          return (value as []).filter((item) => item !== null);
+        }
+        else {
+          return value;
+        }
+      }
+    );
+
+    // flatten array of values
+    const cond_col_values_wo_nulls_flatten = cond_col_values_wo_nulls2.reduce(
+      (acc: unknown[], val: unknown) => acc.concat(val),
+      []
+    );
+
     // console.log(
     //   `cond_col_names = ${cond_col_names}, cond_col_values = ${cond_col_values}, cond_col_values_wo_nulls = ${cond_col_values_wo_nulls}`
     // );
     return (await /*database.all(sql, cond_col_values_wo_nulls)*/ this.execQuery(
       sql,
       ...[
-        ...cond_col_values_wo_nulls,
+        ...cond_col_values_wo_nulls_flatten,
         ...(extra_cond_values ? extra_cond_values : []),
       ]
     )) as RowObject[];
@@ -693,6 +751,20 @@ export abstract class DBDataMovieManager extends DBData {
     );
   }
 
+  private _countParams(cond_col_values: (unknown | unknown[] | null)[]) {
+    return cond_col_values.reduce((acc: number, val: unknown) => {
+      if (val) {
+        if (typeof val === "object" && val instanceof Array) {
+          return acc + (val as unknown[]).length;
+        } else {
+          return acc + 1;
+        }
+      } else {
+        return acc;
+      }
+    }, 0);
+  }
+
   //================================================================================================================
 
   /*
@@ -703,7 +775,7 @@ export abstract class DBDataMovieManager extends DBData {
    * @param offset - offset of rows to tetrieve for paging (tid is then ignored)
    */
   async getMovieGroupTypes(
-    tid: number | undefined,
+    tid: number | number[] | undefined,
     ex_column_names?: string[] | undefined,
     first?: number | undefined,
     after?: Record<string, unknown> | undefined,
@@ -730,13 +802,19 @@ export abstract class DBDataMovieManager extends DBData {
       `${moviegrouptype_tab}.description`,
     ];
 
+    const cond_col_names = typeof tid !== "undefined" ? id_column_names : [];
+    const cond_col_values = typeof tid !== "undefined" ? [tid] : [];
+    const join_conds: string[] = [];
+    const extra_conds: string[] = [];
+
     const searchParans = this._findSearchParams(
       ["name", "_id"],
       first,
       after,
       last,
       before,
-      offset
+      offset,
+      this._countParams(cond_col_values)
     );
 
     this._appendExColumnNames(
@@ -746,11 +824,6 @@ export abstract class DBDataMovieManager extends DBData {
         ? ex_column_names.concat(searchParans.indexFields)
         : searchParans.indexFields
     );
-
-    const cond_col_names = typeof tid !== "undefined" ? id_column_names : [];
-    const cond_col_values = typeof tid !== "undefined" ? [tid] : [];
-    const join_conds: string[] = [];
-    const extra_conds: string[] = [];
 
     extra_conds.push(...searchParans.whereConds);
 
@@ -896,6 +969,16 @@ export abstract class DBDataMovieManager extends DBData {
     }
   }
 
+  private _normalizeNumberParamArray(
+    p: number | number[]
+  ): number | null | (number | null)[] {
+    if (typeof p === "number") {
+      return p !== 0 ? p : null;
+    } else {
+      return (p as number[]).map((val: number) => (val !== 0 ? val : null));
+    }
+  }
+
   //================================================================================================================
 
   /*
@@ -907,8 +990,8 @@ export abstract class DBDataMovieManager extends DBData {
    * @param offset - offset of rows to tetrieve for paging (mgid is then ignored)
    */
   async getMovieGroups(
-    tid: number | undefined,
-    gid: number | undefined,
+    tid: number | number[] | undefined,
+    gid: number | number[] | undefined,
     ex_column_names?: string[] | undefined,
     first?: number | undefined,
     after?: Record<string, unknown> | undefined,
@@ -933,20 +1016,39 @@ export abstract class DBDataMovieManager extends DBData {
     await this.beginTransaction();
 
     try {
-      if (typeof tid !== "undefined" && tid !== 0) {
-        const rows0 = await this.getRowsCore(
-          [this.dbextra.moviegrouptype.getExtendedName()],
-          ["_id"],
-          ["_id"],
-          [tid],
-          [],
-          [],
-          undefined,
-          []
-        );
+      if (typeof gid === "undefined") {
+        if (typeof tid !== "undefined" && tid !== 0) {
+          const isTidArray = typeof tid === "object" && tid instanceof Array;
+          let tid2;
 
-        if (rows0.length !== 1)
-          throw new MissingGroupTypeError(`Missing group type: ${tid}`);
+          if (isTidArray) {
+            // filter off 0
+            tid2 = (tid as number[]).filter((val: number) => val !== 0);
+          } else {
+            tid2 = tid;
+          }
+
+          if ((tid2 as number[]).length > 0) {
+            const rows0 = await this.getRowsCore(
+              [this.dbextra.moviegrouptype.getExtendedName()],
+              ["_id"],
+              ["_id"],
+              [tid2],
+              [],
+              [],
+              undefined,
+              []
+            );
+
+            if (isTidArray) {
+              if (rows0.length !== (tid2 as number[]).length)
+                throw new MissingGroupTypeError(`Missing group type: ${tid2}`);
+            } else {
+              if (rows0.length !== 1)
+                throw new MissingGroupTypeError(`Missing group type: ${tid2}`);
+            }
+          }
+        }
       }
 
       // TODO:
@@ -968,21 +1070,6 @@ export abstract class DBDataMovieManager extends DBData {
         `${moviegrouptypemoviegroup_tab}.gendid`,
       ];
 
-      const searchParans = this._findSearchParams(
-        ["name", "_id"],
-        first,
-        after,
-        last,
-        before,
-        offset
-      );
-      this._appendExColumnNames(
-        column_names,
-        playlistinfo_tab,
-        ex_column_names !== undefined
-          ? ex_column_names.concat(searchParans.indexFields)
-          : searchParans.indexFields
-      );
       const cond_col_names =
         typeof gid !== "undefined"
           ? id_column_names
@@ -993,12 +1080,30 @@ export abstract class DBDataMovieManager extends DBData {
         typeof gid !== "undefined"
           ? [gid]
           : typeof tid !== "undefined"
-          ? [tid !== 0 ? tid : null]
+          ? [this._normalizeNumberParamArray(tid)]
           : [];
       const join_conds = [
         `${playlistinfo_tab}._id = ${moviegrouptypemoviegroup_tab}.mgid`,
       ];
       const extra_conds: string[] = [];
+
+      const searchParans = this._findSearchParams(
+        ["name", "_id"],
+        first,
+        after,
+        last,
+        before,
+        offset,
+        this._countParams(cond_col_values)
+      );
+
+      this._appendExColumnNames(
+        column_names,
+        playlistinfo_tab,
+        ex_column_names !== undefined
+          ? ex_column_names.concat(searchParans.indexFields)
+          : searchParans.indexFields
+      );
 
       extra_conds.push(...searchParans.whereConds);
 
@@ -1344,7 +1449,7 @@ export abstract class DBDataMovieManager extends DBData {
       if (rows0.length === 1) {
         // check if the terget type=0 (type=0 is special and always exists [no type])
         if (new_tid === 0) {
-          this.deleteRowCore(
+          await this.deleteRowCore(
             this.dbextra.moviegrouptypemoviegroup.getExtendedName(),
             ["mgid"],
             [gid]
@@ -1430,7 +1535,7 @@ export abstract class DBDataMovieManager extends DBData {
           throw new MissingGroupTypeError(`Missing group type: ${tid}`);
       }
 
-      this.deleteRowCore(
+      await this.deleteRowCore(
         this.dbextra.moviegrouptypemoviegroup.getExtendedName(),
         ["mgid"],
         [gid]
@@ -1455,11 +1560,11 @@ export abstract class DBDataMovieManager extends DBData {
   private _buildSearcWhere(
     indexFields: string[],
     cursor: Record<string, unknown>,
-    isAfter: boolean
+    isAfter: boolean,
+    paramStartIndex: number
   ): ISearchWhere {
     const oper = isAfter ? ">" : "<";
     const params: unknown[] = [];
-    const sqlParam = this.getSQLParameter(0 /* ignored */);
 
     const whereCond = indexFields.reduce(
       (cond: string, key: string, index: number, arr: string[]): string => {
@@ -1472,20 +1577,22 @@ export abstract class DBDataMovieManager extends DBData {
             params.push(cursor[this._getColumnName(arr[i])]);
             eqCond +=
               i === 0
-                ? `${arr[i]} = ${sqlParam}`
-                : ` AND ${arr[i]} = ${sqlParam}`;
+                ? `${arr[i]} = ${this.getSQLParameter(paramStartIndex++)}`
+                : ` AND ${arr[i]} = ${this.getSQLParameter(paramStartIndex++)}`;
           }
 
           params.push(cursor[colName]);
-          eqCond += ` AND ${arr[index]} ${oper} ${sqlParam}`;
+          eqCond += ` AND ${arr[index]} ${oper} ${this.getSQLParameter(
+            paramStartIndex++
+          )}`;
 
           const finish = index < arr.length - 1 ? "" : ")";
           return `${cond} OR ${eqCond}${finish}`;
         } else {
           params.push(cursor[colName]);
           return arr.length > 1
-            ? `(${colName} ${oper} ${sqlParam}`
-            : `(${colName} ${oper} ${sqlParam})`;
+            ? `(${colName} ${oper} ${this.getSQLParameter(paramStartIndex++)}`
+            : `(${colName} ${oper} ${this.getSQLParameter(paramStartIndex++)})`;
         }
       },
       ""
@@ -1503,14 +1610,15 @@ export abstract class DBDataMovieManager extends DBData {
     after: Record<string, unknown> | undefined,
     last: number | undefined,
     before: Record<string, unknown> | undefined,
-    offset: number | undefined
+    offset: number | undefined,
+    paramStartIndex: number
   ): ISearchParams {
     const whereConds: string[] = [];
     const whereParams: unknown[] = [];
 
     const whereCondAfter =
       after !== undefined
-        ? this._buildSearcWhere(indexFields, after, true)
+        ? this._buildSearcWhere(indexFields, after, true, paramStartIndex)
         : undefined;
     if (whereCondAfter) {
       whereConds.push(whereCondAfter.whereCond);
@@ -1563,7 +1671,7 @@ export abstract class DBDataMovieManager extends DBData {
     if (beforeIsInside) {
       const whereBeforeCond =
         before !== undefined
-          ? this._buildSearcWhere(indexFields, before, false)
+          ? this._buildSearcWhere(indexFields, before, false, paramStartIndex)
           : undefined;
       if (whereBeforeCond) {
         whereConds.push(whereBeforeCond.whereCond);
@@ -1614,8 +1722,8 @@ export abstract class DBDataMovieManager extends DBData {
    * @param offset - offset of rows to tetrieve for paging (tid is then ignored)
    */
   async getMovies(
-    gid: number | undefined,
-    mid: string | undefined,
+    gid: number | number[] | undefined,
+    mid: string | number[] | undefined,
     ex_column_names?: string[] | undefined,
     first?: number | undefined,
     after?: Record<string, unknown> | undefined,
@@ -1670,7 +1778,8 @@ export abstract class DBDataMovieManager extends DBData {
             ...id_column_names,
             `${movie_tab}.title`,
             `${movie_tab}.mediaFullPath`,
-            `MediaInfo5.folder` /*, `${playiteminfo_tab}.playlistID`*/,
+            `MediaInfo5.folder`,
+            `${playiteminfo_tab}.playlistID`,
             `${playiteminfo_tab}.listOrder`,
           ]
         : // all movies
@@ -1695,45 +1804,6 @@ export abstract class DBDataMovieManager extends DBData {
           `${movie_tab}.mediaFullPath`,
         ];
 
-    const searchParans =
-      mid !== undefined || gid === undefined
-        ? this._findSearchParams(
-            ["title", "_id"],
-            first,
-            after,
-            last,
-            before,
-            offset
-          )
-        : this._findSearchParams(
-            ["listOrder"],
-            first,
-            after,
-            last,
-            before,
-            offset
-          );
-
-    this._appendExColumnNames(
-      column_names,
-      (colName: string) => {
-        colName = colName.toLowerCase();
-
-        if (
-          colName === "type" ||
-          colName === "type" ||
-          colName === "mediatitle" ||
-          colName === "mediaid" ||
-          colName === "playlistid"
-        ) {
-          return playiteminfo_tab;
-        } else {
-          return movie_tab;
-        }
-      },
-      ex_column_names
-    );
-
     const cond_col_names =
       typeof mid !== "undefined"
         ? id_column_names
@@ -1744,7 +1814,7 @@ export abstract class DBDataMovieManager extends DBData {
       typeof mid !== "undefined"
         ? [mid]
         : typeof gid !== "undefined"
-        ? [gid !== 0 ? gid : null]
+        ? [this._normalizeNumberParamArray(gid)]
         : [];
 
     const join_conds: string[] = [];
@@ -1773,6 +1843,47 @@ export abstract class DBDataMovieManager extends DBData {
           `substr(${movie_tab}._id, ${MEDIA_INFO_PREFIX.length}) = substr(${playiteminfo_tab}.mediaID, ${PLAY_ITEM_INFO_PREFIX.length})`,
         ]
       : [];
+
+    const searchParans =
+      mid !== undefined || gid === undefined
+        ? this._findSearchParams(
+            ["title", "_id"],
+            first,
+            after,
+            last,
+            before,
+            offset,
+            this._countParams(cond_col_values)
+          )
+        : this._findSearchParams(
+            ["listOrder"],
+            first,
+            after,
+            last,
+            before,
+            offset,
+            this._countParams(cond_col_values)
+          );
+
+    this._appendExColumnNames(
+      column_names,
+      (colName: string) => {
+        colName = colName.toLowerCase();
+
+        if (
+          colName === "type" ||
+          colName === "type" ||
+          colName === "mediatitle" ||
+          colName === "mediaid" ||
+          colName === "playlistid"
+        ) {
+          return playiteminfo_tab;
+        } else {
+          return movie_tab;
+        }
+      },
+      ex_column_names
+    );
 
     extra_conds.push(...searchParans.whereConds);
 
@@ -2282,7 +2393,7 @@ export abstract class DBDataMovieManager extends DBData {
    * @param offset - offset of rows to tetrieve for paging (mgid is then ignored)
    */
   async getGroupsOfMovie(
-    mid: string,
+    mid: string | string[],
     ex_column_names?: string[] | undefined,
     first?: number | undefined,
     after?: Record<string, unknown> | undefined,
@@ -2301,13 +2412,37 @@ export abstract class DBDataMovieManager extends DBData {
     const table_names = [
       playlistinfo_tab,
       playiteminfo_tab,
-      moviegrouptypemoviegroup_tab, 
+      moviegrouptypemoviegroup_tab,
     ];
     const id_column_names = [`${playlistinfo_tab}._id`];
     const column_names = [
       ...id_column_names,
-      `${playlistinfo_tab}.name` , `${moviegrouptypemoviegroup_tab}.gendid`,
+      `${playlistinfo_tab}.name`,
+      `'${MEDIA_INFO_PREFIX}' || SUBSTR(${playiteminfo_tab}.mediaid, ${
+        PLAY_ITEM_INFO_PREFIX.length + 1
+      }) AS mid`,
+      `${moviegrouptypemoviegroup_tab}.gendid`,
     ];
+
+    const cond_col_names = [`mediaID`];
+    const media_id =
+      typeof mid === "string"
+        ? this.mediaFullPath2id(
+            mid.substring(MEDIA_INFO_PREFIX.length),
+            PLAY_ITEM_INFO_PREFIX
+          )
+        : (mid as string[]).map((item) =>
+            this.mediaFullPath2id(
+              item.substring(MEDIA_INFO_PREFIX.length),
+              PLAY_ITEM_INFO_PREFIX
+            )
+          );
+    const cond_col_values = [media_id];
+    const join_conds = [
+      `${playlistinfo_tab}._id = ${playiteminfo_tab}.playlistID`,
+      `${playlistinfo_tab}._id = ${moviegrouptypemoviegroup_tab}.mgid`,
+    ];
+    const extra_conds: string[] = [];
 
     const searchParans = this._findSearchParams(
       [`${playlistinfo_tab}.name`, `${playlistinfo_tab}._id`],
@@ -2315,7 +2450,8 @@ export abstract class DBDataMovieManager extends DBData {
       after,
       last,
       before,
-      offset
+      offset,
+      this._countParams(cond_col_values)
     );
 
     this._appendExColumnNames(column_names, playlistinfo_tab, ex_column_names);
@@ -2325,18 +2461,6 @@ export abstract class DBDataMovieManager extends DBData {
       undefined,
       searchParans.indexFields
     );
-
-    const cond_col_names = [`mediaID`];
-    const media_id = this.mediaFullPath2id(
-      mid.substring(MEDIA_INFO_PREFIX.length),
-      PLAY_ITEM_INFO_PREFIX
-    );
-    const cond_col_values = [media_id];
-    const join_conds = [
-      `${playlistinfo_tab}._id = ${playiteminfo_tab}.playlistID`,
-      `${playlistinfo_tab}._id = ${moviegrouptypemoviegroup_tab}.mgid`, 
-    ];
-    const extra_conds: string[] = [];
 
     extra_conds.push(...searchParans.whereConds);
 
@@ -2354,7 +2478,7 @@ export abstract class DBDataMovieManager extends DBData {
       extra_conds,
       searchParans.whereParams,
       order_col_names,
-      [" JOIN ", ' LEFT JOIN '],
+      [" JOIN ", " LEFT JOIN "],
       searchParans.limit,
       searchParans.offset
     );

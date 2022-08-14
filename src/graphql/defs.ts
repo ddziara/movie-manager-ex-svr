@@ -56,7 +56,7 @@ export const typeDefs = gql`
     playDate: String!
     studio: String
     protected: Boolean  
-    movieGroups(first: Int, after: String, last: Int, before: String, offset: Int): MovieGroupsConnection!
+    movieGroups: MovieGroupsConnection!
   }
 
   type PositionedMovie {
@@ -90,7 +90,7 @@ export const typeDefs = gql`
     playDate: String!
     studio: String
     protected: Boolean  
-    movieGroups(first: Int, after: String, last: Int, before: String, offset: Int): MovieGroupsConnection!
+    movieGroups: MovieGroupsConnection!
     listOrder: Int!
   }
 
@@ -98,7 +98,7 @@ export const typeDefs = gql`
     _id: ID!
     name: String!
     description: String
-    movieGroups(first: Int, after: String, last: Int, before: String, offset: Int): GroupTypesConnection!
+    movieGroups: GroupTypesConnection!
   }
 
   type MovieGroup {
@@ -113,7 +113,7 @@ export const typeDefs = gql`
     visible: Visibility!
     custom: String
     groupType: GroupType
-    movies(first: Int, after: String, last: Int, before: String, offset: Int): PositionedMoviesConnection!
+    movies: PositionedMoviesConnection!
   }
 
   ${buildConnectionEdgeTypes("Movies", "Movie", "Movie")}
@@ -177,6 +177,7 @@ export const typeDefs = gql`
     name: String
     description: String
   }
+  
   type Mutation {
     # movies
     addMovie(mediaFullPath: String!, gid: ID, listOrder: Int, movieInfo: MovieInfoInput!): ID!

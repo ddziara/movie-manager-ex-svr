@@ -1,7 +1,6 @@
 import { ApolloServer } from "apollo-server-express";
 import { typeDefs } from "../graphql/defs";
 import {
-  IDataSources,
   IGroupType,
   IMovie,
   IMovieGroup,
@@ -12,10 +11,11 @@ import knx, { Knex } from "knex";
 import type { DBDataMovieManagerCyberlink } from "../database/db-data-moviemanager-cyberlink";
 import { DataSources } from "apollo-server-core/dist/graphqlOptions";
 import { AppPlatformType } from "../common/types";
-import { MoviesDataSource } from "../datasources/movies-data-source";
 import { dateToUTCString } from "../database/utils";
-import { IConnection, IEdge } from "../graphql/connection";
+import { IConnection } from "../graphql/connection";
 import { GraphQLResponse } from "apollo-server-core";
+import { IContext } from "../context";
+import type { IDBDataMovieManagerKnexBaseConstr } from "../datasources/movies-data-source";
 
 jest.setTimeout(600000);
 
@@ -212,6 +212,7 @@ const _getGraphQLPagingParams = (
 // ${"postgres"}
 describe.each`
   appPlatform
+  ${"cyberlink"}
   ${"postgres"}
 `(
   "Testing GraphQL querries, mutations and subscriptions",
@@ -298,11 +299,7 @@ describe.each`
     };
 
     const _initData = async () => {
-      let moviesDataSource: MoviesDataSource | undefined;
-
-      const { MoviesDataSource } = await import(
-        "../datasources/movies-data-source"
-      );
+      let dBDataMovieManagerKnexConstr: IDBDataMovieManagerKnexBaseConstr;
 
       if (appPlatform === "cyberlink") {
         const { getCyberlinkRootDBPath, getCyberlinkRootDBName } = await import(
@@ -322,11 +319,8 @@ describe.each`
           "../database/db-data-moviemanager-cyberlink"
         );
 
-        moviesDataSource = new MoviesDataSource(
-          knex,
-          DBDataMovieManagerCyberlink
-        );
-      } else if (appPlatform === "postgres") {
+        dBDataMovieManagerKnexConstr = DBDataMovieManagerCyberlink;
+      } else /*if (appPlatform === "postgres")*/ {
         knex = knx({
           client: "pg",
           connection: process.env.TEST_DATABASE_URL,
@@ -337,51 +331,29 @@ describe.each`
           "../database/db-data-moviemanager-postgres"
         );
 
-        moviesDataSource = new MoviesDataSource(
-          knex,
-          DBDataMovieManagerPostgres
-        );
-
-        // remove database content
-        await moviesDataSource.init();
-
-        let tab;
-        const dbDataMovieManager = moviesDataSource["_dbDataMovieManager"];
-
-        let indx = 0;
-        while ((tab = dbDataMovieManager.dbcldb.getTable(indx++)) != null)
-          await dbDataMovieManager.clearTable(tab);
-        //==
-        indx = 0;
-        while ((tab = dbDataMovieManager.dbextra.getTable(indx++)) != null)
-          await dbDataMovieManager.clearTable(tab);
-        //==
-        indx = 0;
-        while (
-          (tab = dbDataMovieManager.dbmediaScannerCache.getTable(indx++)) !=
-          null
-        )
-          await dbDataMovieManager.clearTable(tab);
-        //==
-        indx = 0;
-        while ((tab = dbDataMovieManager.dbmoviemedia.getTable(indx++)) != null)
-          await dbDataMovieManager.clearTable(tab);
-        //==
-        indx = 0;
-        while ((tab = dbDataMovieManager.dbplaylist.getTable(indx++)) != null)
-          await dbDataMovieManager.clearTable(tab);
+        dBDataMovieManagerKnexConstr = DBDataMovieManagerPostgres;
       }
 
-      if (moviesDataSource) {
-        await moviesDataSource.init();
+      const { MoviesDataSource } = await import(
+        "../datasources/movies-data-source"
+      );
 
-        testServer = new ApolloServer({
-          typeDefs,
-          resolvers,
-          dataSources: (): DataSources<IDataSources> =>
-            ({ moviesDataSource } as { moviesDataSource: MoviesDataSource }),
-        });
+      const moviesDataSource = new MoviesDataSource(
+        knex,
+        dBDataMovieManagerKnexConstr
+      );
+
+      await moviesDataSource.init();
+
+      if (appPlatform === "postgres") {
+        await moviesDataSource.clearTables();
       }
+
+      testServer = new ApolloServer({
+        typeDefs,
+        resolvers,
+        dataSources: (): DataSources<IContext> => ({ moviesDataSource }),
+      });
     };
 
     const _uninitData = async () => {
@@ -1136,7 +1108,7 @@ describe.each`
         const result4 = await testServer.executeOperation({
           query:
             "query GetMovieGroup($_id: ID!) { movieGroup(_id: $_id) { _id name } }",
-          variables: { _id: "non-existing" },
+          variables: { _id: "-1" },
         });
 
         expect(result4.data).toBeTruthy();
@@ -1619,7 +1591,7 @@ describe.each`
         const result4 = await testServer.executeOperation({
           query:
             "query GetGroupType($_id: ID!) { groupType(_id: $_id) { _id name description } }",
-          variables: { _id: "non-existing" },
+          variables: { _id: "-1" },
         });
 
         expect(result4.data).toBeTruthy();
@@ -2828,632 +2800,636 @@ describe.each`
       });
     });
 
-    describe("Testing groups of movies paging", () => {
-      const groupName = `Action`;
-      //==
-      const groupName2 = `Adventure`;
-      //==
-      const groupName3 = `Drama`;
-      //==
-      const groupName4 = `Favourive`;
-      //==
-      const groupName5 = `George Lucas`;
-      //==
-      const title = `The Perfect Storm (2000)`;
-      const folder = `Perfect Storm (2000), The `;
-      const mediaFullPath = `C:\\Movies\\${folder}\\The.Perfect.Storm.(2000).mkv`;
-      //==
-      let movieResult: GraphQLResponse;
-      //==
-      let groupResult: GraphQLResponse;
-      let groupResult2: GraphQLResponse;
-      let groupResult3: GraphQLResponse;
-      let groupResult4: GraphQLResponse;
-      let groupResult5: GraphQLResponse;
-      //==
-      const results: GraphQLResponse[] = [];
-
-      beforeAll(async () => {
-        await _initData();
-      });
-      afterAll(async () => {
-        await _uninitData();
-      });
-
-      test("Adding a movie group", async () => {
-        groupResult = await testServer.executeOperation({
-          query:
-            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
-          variables: { name: groupName },
-        });
-
-        expect(groupResult.errors).toBeUndefined();
-
-        if (groupResult.data) {
-          expect(
-            parseInt(groupResult.data.addMovieGroup)
-          ).toBeGreaterThanOrEqual(1);
-        }
-      });
-
-      test("Adding a movie to a group", async () => {
-        movieResult = await testServer.executeOperation({
-          query:
-            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, movieInfo: { title: $title } ) }",
-          variables: {
-            mediaFullPath,
-            gid: groupResult.data?.addMovieGroup,
-            title,
-          },
-        });
-
-        expect(movieResult.errors).toBeUndefined();
-
-        if (movieResult.data) {
-          expect(movieResult.data.addMovie).toBe(`MOVIE_${mediaFullPath}`);
-        }
-      });
-
-      test("Adding a movie group", async () => {
-        groupResult2 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
-          variables: { name: groupName2 },
-        });
-
-        expect(groupResult2.errors).toBeUndefined();
-
-        if (groupResult2.data) {
-          expect(
-            parseInt(groupResult2.data.addMovieGroup)
-          ).toBeGreaterThanOrEqual(1);
-        }
-      });
-
-      test("Adding a movie group", async () => {
-        groupResult3 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
-          variables: { name: groupName3 },
-        });
-
-        expect(groupResult3.errors).toBeUndefined();
-
-        if (groupResult3.data) {
-          expect(
-            parseInt(groupResult3.data.addMovieGroup)
-          ).toBeGreaterThanOrEqual(1);
-        }
-      });
-
-      test("Adding a movie group", async () => {
-        groupResult4 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
-          variables: { name: groupName4 },
-        });
-
-        expect(groupResult4.errors).toBeUndefined();
-
-        if (groupResult4.data) {
-          expect(
-            parseInt(groupResult4.data.addMovieGroup)
-          ).toBeGreaterThanOrEqual(1);
-        }
-      });
-
-      test("Adding a movie group", async () => {
-        groupResult5 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
-          variables: { name: groupName5 },
-        });
-
-        expect(groupResult5.errors).toBeUndefined();
-
-        if (groupResult5.data) {
-          expect(
-            parseInt(groupResult5.data.addMovieGroup)
-          ).toBeGreaterThanOrEqual(1);
-        }
-      });
-
-      test("Associating movie & movie group", async () => {
-        const result2 = await testServer.executeOperation({
-          query:
-            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
-          variables: {
-            _mid: movieResult.data?.addMovie,
-            _gid: groupResult2.data?.addMovieGroup,
-          },
-        });
-
-        expect(result2.data).toBeTruthy();
-      });
-
-      test("Associating movie & movie group", async () => {
-        const result2 = await testServer.executeOperation({
-          query:
-            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
-          variables: {
-            _mid: movieResult.data?.addMovie,
-            _gid: groupResult3.data?.addMovieGroup,
-          },
-        });
-
-        expect(result2.data).toBeTruthy();
-      });
-
-      test("Associating movie & movie group", async () => {
-        const result2 = await testServer.executeOperation({
-          query:
-            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
-          variables: {
-            _mid: movieResult.data?.addMovie,
-            _gid: groupResult4.data?.addMovieGroup,
-          },
-        });
-
-        expect(result2.data).toBeTruthy();
-      });
-
-      test("Associating movie & movie group", async () => {
-        const result2 = await testServer.executeOperation({
-          query:
-            "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
-          variables: {
-            _mid: movieResult.data?.addMovie,
-            _gid: groupResult5.data?.addMovieGroup,
-          },
-        });
-
-        expect(result2.data).toBeTruthy();
-      });
-
-      describe.each`
-        first        | afterInfo                                                           | last         | beforeInfo                                                          | offset       | expPrevPage | expNextPage | expData
-        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[groupName], [groupName2], [groupName3], [groupName4], [groupName5]]}
-        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
-        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
-        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName5]]}
-        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -2 }}             | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${false}    | ${[]}
-        ${7}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[groupName], [groupName2], [groupName3], [groupName4], [groupName5]]}
-        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4], [groupName5]]}
-        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[groupName]]}
-        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -2 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${2}         | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${3}         | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${4}         | ${false}    | ${true}     | ${[[groupName]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${5}         | ${false}    | ${false}    | ${[]}
-        ${3}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2], [groupName3]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 1 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName3], [groupName4], [groupName5]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
-        ${2}         | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
-        ${2}         | ${undefined}                                                        | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2]]}
-        ${2}         | ${undefined}                                                        | ${3}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
-        ${2}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
-        ${5}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[[groupName], [groupName2], [groupName3], [groupName4]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${5}         | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[groupName2], [groupName3], [groupName4], [groupName5]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${3}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${2}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
-        ${1}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName2], [groupName3], [groupName4]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName2], [groupName3], [groupName4]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[]}
-        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
-        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
-        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName3], [groupName4]]}
-        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
-        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
-        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName3], [groupName4]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName3]]}
-      `(
-        "Getting groups of a movie (first=$first, afer=$afterInfo, last=$last, before=$beforeInfo, offset=$offset)",
-        ({
-          first,
-          afterInfo,
-          last,
-          beforeInfo,
-          offset,
-          expPrevPage,
-          expNextPage,
-          expData,
-        }: IPagingInfo) => {
-          test("", async () => {
-            const { variables, params, variablesObj } = _getGraphQLPagingParams(
-              first,
-              afterInfo,
-              last,
-              beforeInfo,
-              offset,
-              results,
-              "movieGroups",
-              (result: GraphQLResponse) => {
-                const moviesConnection = (
-                  result.data as Record<string, unknown>
-                )["movies"] as IConnection<Partial<IMovie>>;
-                return moviesConnection.nodes[0].movieGroups as IConnection<
-                  Partial<IMovieGroup>
-                >;
-              }
-            );
-
-            const result = await testServer.executeOperation({
-              query: `query GetMovies${variables} { movies { nodes { title movieGroups${params} { 
-              edges { 
-                node { name } 
-                cursor 
-              }
-              pageInfo {
-                hasPreviousPage
-                hasNextPage
-                startCursor
-                endCursor
-              }
-            } } } }`,
-              ...variablesObj,
-            });
-
-            results.push(result);
-
-            expect(result.data).toBeTruthy();
-
-            if (result.data) {
-              const moviesConnection = result.data["movies"] as IConnection<
-                Partial<IMovie>
-              >;
-              expect(moviesConnection.edges).not.toBeNull();
-
-              const nodes = moviesConnection.nodes;
-
-              if (nodes) {
-                expect(nodes.length).toBe(1);
-                //===
-                const row = nodes[0];
-
-                expect(row.title).toBe(title);
-                expect(row.movieGroups).not.toBeNull();
-
-                if (row.movieGroups) {
-                  const edges = row.movieGroups.edges;
-                  expect(edges).not.toBeNull();
-
-                  expect(row.movieGroups.pageInfo.hasPreviousPage).toBe(
-                    expPrevPage
-                  );
-                  expect(row.movieGroups.pageInfo.hasNextPage).toBe(
-                    expNextPage
-                  );
-
-                  if (edges) {
-                    expect(edges.length).toBe(expData.length);
-                    //===
-                    for (let i = 0; i < edges.length; i++) {
-                      const row = edges[i].node;
-
-                      expect(row.name).toBe(expData[i][0]);
-                    }
-                  }
-                }
-              }
-            }
-          });
-        }
-      );
-    });
-
-    describe("Testing movies in group paging", () => {
-      const groupName7 = `Star Wars`;
-      //==
-      const title2 = `Star Wars: Episode IV - New Hope, A (1977)`;
-      const folder2 = `Star Wars; Episode IV - A New Hope (1977)`;
-      const mediaFullPath2 = `C:\\Movies\\${folder2}\\Star Wars.Episode.IV.A.New.Hope.(1977).mkv`;
-      //==
-      const title3 = `Star Wars: Episode V - Empire Strikes Back, The (1980)`;
-      const folder3 = `Star Wars; Episode V - The Empire Strikes Back (1980)`;
-      const mediaFullPath3 = `C:\\Movies\\${folder3}\\Star.Wars.Episode.V.The.Empire.Strikes.Back.(1980).mkv`;
-      //==
-      const title5 = `Star Wars: Episode I - Phantom Menace, The (1999)`;
-      const folder5 = `Star Wars; Episode I - The Phantom Menace (1999)`;
-      const mediaFullPath5 = `C:\\Movies\\${folder5}\\Star.Wars.Episode.I.The.Phantom.Menace.(1999).mkv`;
-      //==
-      const title6 = `Star Wars: Episode II - Attack of the Clones (2002)`;
-      const folder6 = `Star Wars; Episode II - Attack of the Clones (2002)`;
-      const mediaFullPath6 = `C:\\Movies\\${folder6}\\Star.Wars.Episode.II.Attack.of.the.Clones.(2002).mkv`;
-      //==
-      const title7 = `Star Wars: Episode III - Revenge of the Sith (2005)`;
-      const folder7 = `Star Wars; Episode III - Revenge of the Sith (2005)`;
-      const mediaFullPath7 = `C:\\Movies\\${folder7}\\Star.Wars.Episode.III.Revenge.of.the.Sith.(2005).mkv`;
-      //==
-      let groupResult7: GraphQLResponse;
-      //==
-      let movieResult2: GraphQLResponse;
-      let movieResult3: GraphQLResponse;
-      let movieResult5: GraphQLResponse;
-      let movieResult6: GraphQLResponse;
-      let movieResult7: GraphQLResponse;
-      //==
-      const results: GraphQLResponse[] = [];
-
-      beforeAll(async () => {
-        await _initData();
-      });
-      afterAll(async () => {
-        await _uninitData();
-      });
-
-      test("Adding a movie group", async () => {
-        groupResult7 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
-          variables: { name: groupName7 },
-        });
-
-        expect(groupResult7.errors).toBeUndefined();
-
-        if (groupResult7.data) {
-          expect(
-            parseInt(groupResult7.data.addMovieGroup)
-          ).toBeGreaterThanOrEqual(1);
-        }
-      });
-
-      test("Adding a movie to a group", async () => {
-        movieResult2 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
-          variables: {
-            mediaFullPath: mediaFullPath2,
-            gid: groupResult7.data?.addMovieGroup,
-            listOrder: 1,
-            title: title2,
-          },
-        });
-
-        expect(movieResult2.errors).toBeUndefined();
-
-        if (movieResult2.data) {
-          expect(movieResult2.data.addMovie).toBe(`MOVIE_${mediaFullPath2}`);
-        }
-      });
-
-      test("Adding a movie to a group", async () => {
-        movieResult3 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
-          variables: {
-            mediaFullPath: mediaFullPath3,
-            gid: groupResult7.data?.addMovieGroup,
-            listOrder: 2,
-            title: title3,
-          },
-        });
-
-        expect(movieResult3.errors).toBeUndefined();
-
-        if (movieResult3.data) {
-          expect(movieResult3.data.addMovie).toBe(`MOVIE_${mediaFullPath3}`);
-        }
-      });
-
-      test("Adding a movie to a group", async () => {
-        movieResult5 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
-          variables: {
-            mediaFullPath: mediaFullPath5,
-            gid: groupResult7.data?.addMovieGroup,
-            listOrder: 1,
-            title: title5,
-          },
-        });
-
-        expect(movieResult5.errors).toBeUndefined();
-
-        if (movieResult5.data) {
-          expect(movieResult5.data.addMovie).toBe(`MOVIE_${mediaFullPath5}`);
-        }
-      });
-
-      test("Adding a movie to a group", async () => {
-        movieResult6 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
-          variables: {
-            mediaFullPath: mediaFullPath6,
-            gid: groupResult7.data?.addMovieGroup,
-            listOrder: 2,
-            title: title6,
-          },
-        });
-
-        expect(movieResult6.errors).toBeUndefined();
-
-        if (movieResult6.data) {
-          expect(movieResult6.data.addMovie).toBe(`MOVIE_${mediaFullPath6}`);
-        }
-      });
-
-      test("Adding a movie to a group", async () => {
-        movieResult7 = await testServer.executeOperation({
-          query:
-            "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
-          variables: {
-            mediaFullPath: mediaFullPath7,
-            gid: groupResult7.data?.addMovieGroup,
-            listOrder: 3,
-            title: title7,
-          },
-        });
-
-        expect(movieResult7.errors).toBeUndefined();
-
-        if (movieResult7.data) {
-          expect(movieResult7.data.addMovie).toBe(`MOVIE_${mediaFullPath7}`);
-        }
-      });
-
-      describe.each`
-        first        | afterInfo                                                           | last         | beforeInfo                                                          | offset       | expPrevPage | expNextPage | expData
-        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[title5, 1], [title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
-        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
-        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
-        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title3, 5]]}
-        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -2 }}             | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${false}    | ${[]}
-        ${7}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[title5, 1], [title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
-        ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
-        ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[title5, 1]]}
-        ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -2 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${2}         | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${3}         | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${4}         | ${false}    | ${true}     | ${[[title5, 1]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${5}         | ${false}    | ${false}    | ${[]}
-        ${3}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2], [title7, 3]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 1 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title7, 3], [title2, 4], [title3, 5]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
-        ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
-        ${2}         | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
-        ${2}         | ${undefined}                                                        | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2]]}
-        ${2}         | ${undefined}                                                        | ${3}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
-        ${2}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
-        ${5}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[[title5, 1], [title6, 2], [title7, 3], [title2, 4]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${5}         | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title7, 3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${3}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${2}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
-        ${1}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title5, 1]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title6, 2], [title7, 3], [title2, 4]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title6, 2], [title7, 3], [title2, 4]]}
-        ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[]}
-        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
-        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
-        ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title7, 3], [title2, 4]]}
-        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
-        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
-        ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title7, 3], [title2, 4]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
-        ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title7, 3]]}
-      `(
-        "Getting movies in group (first=$first, afer=$afterInfo, last=$last, before=$beforeInfo, offset=$offset)",
-        ({
-          first,
-          afterInfo,
-          last,
-          beforeInfo,
-          offset,
-          expPrevPage,
-          expNextPage,
-          expData,
-        }: IPagingInfo) => {
-          test("", async () => {
-            const { variables, params, variablesObj } = _getGraphQLPagingParams(
-              first,
-              afterInfo,
-              last,
-              beforeInfo,
-              offset,
-              results,
-              "movies",
-              (result: GraphQLResponse) => {
-                const movieGroupsConnection = (
-                  result.data as Record<string, unknown>
-                )["movieGroups"] as IConnection<Partial<IMovieGroup>>;
-                return movieGroupsConnection.nodes[0].movies as IConnection<
-                  Partial<IMovie>
-                >;
-              }
-            );
-
-            const result = await testServer.executeOperation({
-              query: `query GetMovieGroups${variables} { movieGroups { nodes { name movies${params} { 
-              edges { 
-                node { title listOrder } 
-                cursor 
-              }
-              pageInfo {
-                hasPreviousPage
-                hasNextPage
-                startCursor
-                endCursor
-              }
-            } } } }`,
-              ...variablesObj,
-            });
-
-            results.push(result);
-
-            expect(result.data).toBeTruthy();
-
-            if (result.data) {
-              const movieGroupsConnection = result.data[
-                "movieGroups"
-              ] as IConnection<Partial<IMovieGroup>>;
-              expect(movieGroupsConnection.edges).not.toBeNull();
-
-              const nodes = movieGroupsConnection.nodes;
-
-              if (nodes) {
-                expect(nodes.length).toBe(1);
-                //===
-                const row = nodes[0];
-
-                expect(row.name).toBe(groupName7);
-
-                if (row.movies) {
-                  const edges = row.movies.edges;
-                  expect(edges).not.toBeNull();
-
-                  expect(row.movies.pageInfo.hasPreviousPage).toBe(expPrevPage);
-                  expect(row.movies.pageInfo.hasNextPage).toBe(expNextPage);
-
-                  if (edges) {
-                    expect(edges.length).toBe(expData.length);
-                    //===
-                    for (let i = 0; i < edges.length; i++) {
-                      const row = edges[i].node;
-
-                      expect(row.title).toBe(expData[i][0]);
-                      expect(row.listOrder).toBe(expData[i][1]);
-                    }
-                  }
-                }
-              }
-            }
-          });
-        }
-      );
-    });
+    // Warning: Do not remove paging test 'cause it may be used in the future
+    //
+    // describe("Testing groups of movies paging", () => {
+    //   const groupName = `Action`;
+    //   //==
+    //   const groupName2 = `Adventure`;
+    //   //==
+    //   const groupName3 = `Drama`;
+    //   //==
+    //   const groupName4 = `Favourive`;
+    //   //==
+    //   const groupName5 = `George Lucas`;
+    //   //==
+    //   const title = `The Perfect Storm (2000)`;
+    //   const folder = `Perfect Storm (2000), The `;
+    //   const mediaFullPath = `C:\\Movies\\${folder}\\The.Perfect.Storm.(2000).mkv`;
+    //   //==
+    //   let movieResult: GraphQLResponse;
+    //   //==
+    //   let groupResult: GraphQLResponse;
+    //   let groupResult2: GraphQLResponse;
+    //   let groupResult3: GraphQLResponse;
+    //   let groupResult4: GraphQLResponse;
+    //   let groupResult5: GraphQLResponse;
+    //   //==
+    //   const results: GraphQLResponse[] = [];
+
+    //   beforeAll(async () => {
+    //     await _initData();
+    //   });
+    //   afterAll(async () => {
+    //     await _uninitData();
+    //   });
+
+    //   test("Adding a movie group", async () => {
+    //     groupResult = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+    //       variables: { name: groupName },
+    //     });
+
+    //     expect(groupResult.errors).toBeUndefined();
+
+    //     if (groupResult.data) {
+    //       expect(
+    //         parseInt(groupResult.data.addMovieGroup)
+    //       ).toBeGreaterThanOrEqual(1);
+    //     }
+    //   });
+
+    //   test("Adding a movie to a group", async () => {
+    //     movieResult = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, movieInfo: { title: $title } ) }",
+    //       variables: {
+    //         mediaFullPath,
+    //         gid: groupResult.data?.addMovieGroup,
+    //         title,
+    //       },
+    //     });
+
+    //     expect(movieResult.errors).toBeUndefined();
+
+    //     if (movieResult.data) {
+    //       expect(movieResult.data.addMovie).toBe(`MOVIE_${mediaFullPath}`);
+    //     }
+    //   });
+
+    //   test("Adding a movie group", async () => {
+    //     groupResult2 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+    //       variables: { name: groupName2 },
+    //     });
+
+    //     expect(groupResult2.errors).toBeUndefined();
+
+    //     if (groupResult2.data) {
+    //       expect(
+    //         parseInt(groupResult2.data.addMovieGroup)
+    //       ).toBeGreaterThanOrEqual(1);
+    //     }
+    //   });
+
+    //   test("Adding a movie group", async () => {
+    //     groupResult3 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+    //       variables: { name: groupName3 },
+    //     });
+
+    //     expect(groupResult3.errors).toBeUndefined();
+
+    //     if (groupResult3.data) {
+    //       expect(
+    //         parseInt(groupResult3.data.addMovieGroup)
+    //       ).toBeGreaterThanOrEqual(1);
+    //     }
+    //   });
+
+    //   test("Adding a movie group", async () => {
+    //     groupResult4 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+    //       variables: { name: groupName4 },
+    //     });
+
+    //     expect(groupResult4.errors).toBeUndefined();
+
+    //     if (groupResult4.data) {
+    //       expect(
+    //         parseInt(groupResult4.data.addMovieGroup)
+    //       ).toBeGreaterThanOrEqual(1);
+    //     }
+    //   });
+
+    //   test("Adding a movie group", async () => {
+    //     groupResult5 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+    //       variables: { name: groupName5 },
+    //     });
+
+    //     expect(groupResult5.errors).toBeUndefined();
+
+    //     if (groupResult5.data) {
+    //       expect(
+    //         parseInt(groupResult5.data.addMovieGroup)
+    //       ).toBeGreaterThanOrEqual(1);
+    //     }
+    //   });
+
+    //   test("Associating movie & movie group", async () => {
+    //     const result2 = await testServer.executeOperation({
+    //       query:
+    //         "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+    //       variables: {
+    //         _mid: movieResult.data?.addMovie,
+    //         _gid: groupResult2.data?.addMovieGroup,
+    //       },
+    //     });
+
+    //     expect(result2.data).toBeTruthy();
+    //   });
+
+    //   test("Associating movie & movie group", async () => {
+    //     const result2 = await testServer.executeOperation({
+    //       query:
+    //         "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+    //       variables: {
+    //         _mid: movieResult.data?.addMovie,
+    //         _gid: groupResult3.data?.addMovieGroup,
+    //       },
+    //     });
+
+    //     expect(result2.data).toBeTruthy();
+    //   });
+
+    //   test("Associating movie & movie group", async () => {
+    //     const result2 = await testServer.executeOperation({
+    //       query:
+    //         "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+    //       variables: {
+    //         _mid: movieResult.data?.addMovie,
+    //         _gid: groupResult4.data?.addMovieGroup,
+    //       },
+    //     });
+
+    //     expect(result2.data).toBeTruthy();
+    //   });
+
+    //   test("Associating movie & movie group", async () => {
+    //     const result2 = await testServer.executeOperation({
+    //       query:
+    //         "mutation AssociateMovieAndMovieGroup($_mid: ID!, $_gid: ID!) { associateMovieAndMovieGroup(_mid: $_mid, _gid: $_gid) }",
+    //       variables: {
+    //         _mid: movieResult.data?.addMovie,
+    //         _gid: groupResult5.data?.addMovieGroup,
+    //       },
+    //     });
+
+    //     expect(result2.data).toBeTruthy();
+    //   });
+
+    //   describe.each`
+    //     first        | afterInfo                                                           | last         | beforeInfo                                                          | offset       | expPrevPage | expNextPage | expData
+    //     ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[groupName], [groupName2], [groupName3], [groupName4], [groupName5]]}
+    //     ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+    //     ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
+    //     ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName5]]}
+    //     ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -2 }}             | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${false}    | ${[]}
+    //     ${7}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[groupName], [groupName2], [groupName3], [groupName4], [groupName5]]}
+    //     ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4], [groupName5]]}
+    //     ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[groupName]]}
+    //     ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -2 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${2}         | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${3}         | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${4}         | ${false}    | ${true}     | ${[[groupName]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${5}         | ${false}    | ${false}    | ${[]}
+    //     ${3}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2], [groupName3]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 1 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName3], [groupName4], [groupName5]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
+    //     ${2}         | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+    //     ${2}         | ${undefined}                                                        | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2]]}
+    //     ${2}         | ${undefined}                                                        | ${3}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+    //     ${2}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+    //     ${5}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[[groupName], [groupName2], [groupName3], [groupName4]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[groupName4], [groupName5]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${5}         | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[groupName2], [groupName3], [groupName4], [groupName5]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[groupName3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${3}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${2}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName], [groupName2]]}
+    //     ${1}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName3], [groupName4]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName2], [groupName3], [groupName4]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[groupName2], [groupName3], [groupName4]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[]}
+    //     ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+    //     ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+    //     ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName3], [groupName4]]}
+    //     ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+    //     ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName2], [groupName3], [groupName4]]}
+    //     ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[groupName3], [groupName4]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName2], [groupName3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[groupName3]]}
+    //   `(
+    //     "Getting groups of a movie (first=$first, afer=$afterInfo, last=$last, before=$beforeInfo, offset=$offset)",
+    //     ({
+    //       first,
+    //       afterInfo,
+    //       last,
+    //       beforeInfo,
+    //       offset,
+    //       expPrevPage,
+    //       expNextPage,
+    //       expData,
+    //     }: IPagingInfo) => {
+    //       test("", async () => {
+    //         const { variables, params, variablesObj } = _getGraphQLPagingParams(
+    //           first,
+    //           afterInfo,
+    //           last,
+    //           beforeInfo,
+    //           offset,
+    //           results,
+    //           "movieGroups",
+    //           (result: GraphQLResponse) => {
+    //             const moviesConnection = (
+    //               result.data as Record<string, unknown>
+    //             )["movies"] as IConnection<Partial<IMovie>>;
+    //             return moviesConnection.nodes[0].movieGroups as IConnection<
+    //               Partial<IMovieGroup>
+    //             >;
+    //           }
+    //         );
+
+    //         const result = await testServer.executeOperation({
+    //           query: `query GetMovies${variables} { movies { nodes { title movieGroups${params} { 
+    //           edges { 
+    //             node { name } 
+    //             cursor 
+    //           }
+    //           pageInfo {
+    //             hasPreviousPage
+    //             hasNextPage
+    //             startCursor
+    //             endCursor
+    //           }
+    //         } } } }`,
+    //           ...variablesObj,
+    //         });
+
+    //         results.push(result);
+
+    //         expect(result.data).toBeTruthy();
+
+    //         if (result.data) {
+    //           const moviesConnection = result.data["movies"] as IConnection<
+    //             Partial<IMovie>
+    //           >;
+    //           expect(moviesConnection.edges).not.toBeNull();
+
+    //           const nodes = moviesConnection.nodes;
+
+    //           if (nodes) {
+    //             expect(nodes.length).toBe(1);
+    //             //===
+    //             const row = nodes[0];
+
+    //             expect(row.title).toBe(title);
+    //             expect(row.movieGroups).not.toBeNull();
+
+    //             if (row.movieGroups) {
+    //               const edges = row.movieGroups.edges;
+    //               expect(edges).not.toBeNull();
+
+    //               expect(row.movieGroups.pageInfo.hasPreviousPage).toBe(
+    //                 expPrevPage
+    //               );
+    //               expect(row.movieGroups.pageInfo.hasNextPage).toBe(
+    //                 expNextPage
+    //               );
+
+    //               if (edges) {
+    //                 expect(edges.length).toBe(expData.length);
+    //                 //===
+    //                 for (let i = 0; i < edges.length; i++) {
+    //                   const row = edges[i].node;
+
+    //                   expect(row.name).toBe(expData[i][0]);
+    //                 }
+    //               }
+    //             }
+    //           }
+    //         }
+    //       });
+    //     }
+    //   );
+    // });
+
+    // Warning: Do not remove paging test 'cause it may be used in the future
+    //
+    // describe("Testing movies in group paging", () => {
+    //   const groupName7 = `Star Wars`;
+    //   //==
+    //   const title2 = `Star Wars: Episode IV - New Hope, A (1977)`;
+    //   const folder2 = `Star Wars; Episode IV - A New Hope (1977)`;
+    //   const mediaFullPath2 = `C:\\Movies\\${folder2}\\Star Wars.Episode.IV.A.New.Hope.(1977).mkv`;
+    //   //==
+    //   const title3 = `Star Wars: Episode V - Empire Strikes Back, The (1980)`;
+    //   const folder3 = `Star Wars; Episode V - The Empire Strikes Back (1980)`;
+    //   const mediaFullPath3 = `C:\\Movies\\${folder3}\\Star.Wars.Episode.V.The.Empire.Strikes.Back.(1980).mkv`;
+    //   //==
+    //   const title5 = `Star Wars: Episode I - Phantom Menace, The (1999)`;
+    //   const folder5 = `Star Wars; Episode I - The Phantom Menace (1999)`;
+    //   const mediaFullPath5 = `C:\\Movies\\${folder5}\\Star.Wars.Episode.I.The.Phantom.Menace.(1999).mkv`;
+    //   //==
+    //   const title6 = `Star Wars: Episode II - Attack of the Clones (2002)`;
+    //   const folder6 = `Star Wars; Episode II - Attack of the Clones (2002)`;
+    //   const mediaFullPath6 = `C:\\Movies\\${folder6}\\Star.Wars.Episode.II.Attack.of.the.Clones.(2002).mkv`;
+    //   //==
+    //   const title7 = `Star Wars: Episode III - Revenge of the Sith (2005)`;
+    //   const folder7 = `Star Wars; Episode III - Revenge of the Sith (2005)`;
+    //   const mediaFullPath7 = `C:\\Movies\\${folder7}\\Star.Wars.Episode.III.Revenge.of.the.Sith.(2005).mkv`;
+    //   //==
+    //   let groupResult7: GraphQLResponse;
+    //   //==
+    //   let movieResult2: GraphQLResponse;
+    //   let movieResult3: GraphQLResponse;
+    //   let movieResult5: GraphQLResponse;
+    //   let movieResult6: GraphQLResponse;
+    //   let movieResult7: GraphQLResponse;
+    //   //==
+    //   const results: GraphQLResponse[] = [];
+
+    //   beforeAll(async () => {
+    //     await _initData();
+    //   });
+    //   afterAll(async () => {
+    //     await _uninitData();
+    //   });
+
+    //   test("Adding a movie group", async () => {
+    //     groupResult7 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovieGroup($name: String) { addMovieGroup(movieGroupInfo: { name: $name } ) }",
+    //       variables: { name: groupName7 },
+    //     });
+
+    //     expect(groupResult7.errors).toBeUndefined();
+
+    //     if (groupResult7.data) {
+    //       expect(
+    //         parseInt(groupResult7.data.addMovieGroup)
+    //       ).toBeGreaterThanOrEqual(1);
+    //     }
+    //   });
+
+    //   test("Adding a movie to a group", async () => {
+    //     movieResult2 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+    //       variables: {
+    //         mediaFullPath: mediaFullPath2,
+    //         gid: groupResult7.data?.addMovieGroup,
+    //         listOrder: 1,
+    //         title: title2,
+    //       },
+    //     });
+
+    //     expect(movieResult2.errors).toBeUndefined();
+
+    //     if (movieResult2.data) {
+    //       expect(movieResult2.data.addMovie).toBe(`MOVIE_${mediaFullPath2}`);
+    //     }
+    //   });
+
+    //   test("Adding a movie to a group", async () => {
+    //     movieResult3 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+    //       variables: {
+    //         mediaFullPath: mediaFullPath3,
+    //         gid: groupResult7.data?.addMovieGroup,
+    //         listOrder: 2,
+    //         title: title3,
+    //       },
+    //     });
+
+    //     expect(movieResult3.errors).toBeUndefined();
+
+    //     if (movieResult3.data) {
+    //       expect(movieResult3.data.addMovie).toBe(`MOVIE_${mediaFullPath3}`);
+    //     }
+    //   });
+
+    //   test("Adding a movie to a group", async () => {
+    //     movieResult5 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+    //       variables: {
+    //         mediaFullPath: mediaFullPath5,
+    //         gid: groupResult7.data?.addMovieGroup,
+    //         listOrder: 1,
+    //         title: title5,
+    //       },
+    //     });
+
+    //     expect(movieResult5.errors).toBeUndefined();
+
+    //     if (movieResult5.data) {
+    //       expect(movieResult5.data.addMovie).toBe(`MOVIE_${mediaFullPath5}`);
+    //     }
+    //   });
+
+    //   test("Adding a movie to a group", async () => {
+    //     movieResult6 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+    //       variables: {
+    //         mediaFullPath: mediaFullPath6,
+    //         gid: groupResult7.data?.addMovieGroup,
+    //         listOrder: 2,
+    //         title: title6,
+    //       },
+    //     });
+
+    //     expect(movieResult6.errors).toBeUndefined();
+
+    //     if (movieResult6.data) {
+    //       expect(movieResult6.data.addMovie).toBe(`MOVIE_${mediaFullPath6}`);
+    //     }
+    //   });
+
+    //   test("Adding a movie to a group", async () => {
+    //     movieResult7 = await testServer.executeOperation({
+    //       query:
+    //         "mutation CreateMovie($mediaFullPath: String!, $gid: ID, $listOrder: Int, $title: String) { addMovie(mediaFullPath: $mediaFullPath, gid: $gid, listOrder: $listOrder, movieInfo: { title: $title } ) }",
+    //       variables: {
+    //         mediaFullPath: mediaFullPath7,
+    //         gid: groupResult7.data?.addMovieGroup,
+    //         listOrder: 3,
+    //         title: title7,
+    //       },
+    //     });
+
+    //     expect(movieResult7.errors).toBeUndefined();
+
+    //     if (movieResult7.data) {
+    //       expect(movieResult7.data.addMovie).toBe(`MOVIE_${mediaFullPath7}`);
+    //     }
+    //   });
+
+    //   describe.each`
+    //     first        | afterInfo                                                           | last         | beforeInfo                                                          | offset       | expPrevPage | expNextPage | expData
+    //     ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[title5, 1], [title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
+    //     ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+    //     ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
+    //     ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title3, 5]]}
+    //     ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -1 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -2 }}             | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${false}    | ${[]}
+    //     ${7}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[title5, 1], [title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
+    //     ${undefined} | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
+    //     ${2}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${1}         | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.START_CURSOR, resOffset: -1 }}             | ${undefined} | ${false}    | ${true}     | ${[[title5, 1]]}
+    //     ${2}         | ${{ type: CursorInfoType.END_CURSOR, resOffset: -2 }}               | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${2}         | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${3}         | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${4}         | ${false}    | ${true}     | ${[[title5, 1]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${5}         | ${false}    | ${false}    | ${[]}
+    //     ${3}         | ${undefined}                                                        | ${undefined} | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2], [title7, 3]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 1 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title7, 3], [title2, 4], [title3, 5]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
+    //     ${undefined} | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
+    //     ${2}         | ${undefined}                                                        | ${2}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+    //     ${2}         | ${undefined}                                                        | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2]]}
+    //     ${2}         | ${undefined}                                                        | ${3}         | ${undefined}                                                        | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+    //     ${2}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+    //     ${5}         | ${undefined}                                                        | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[[title5, 1], [title6, 2], [title7, 3], [title2, 4]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${false}    | ${[[title2, 4], [title3, 5]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${5}         | ${undefined}                                                        | ${undefined} | ${false}    | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4], [title3, 5]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${undefined}                                                        | ${undefined} | ${true}     | ${true}     | ${[[title7, 3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${3}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${2}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title5, 1], [title6, 2]]}
+    //     ${1}         | ${undefined}                                                        | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title5, 1]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title7, 3], [title2, 4]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title6, 2], [title7, 3], [title2, 4]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${true}     | ${[[title6, 2], [title7, 3], [title2, 4]]}
+    //     ${undefined} | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${false}    | ${false}    | ${[]}
+    //     ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+    //     ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+    //     ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title7, 3], [title2, 4]]}
+    //     ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+    //     ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title6, 2], [title7, 3], [title2, 4]]}
+    //     ${3}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${false}    | ${[[title7, 3], [title2, 4]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${4}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title6, 2], [title7, 3]]}
+    //     ${2}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 0 }} | ${1}         | ${{ type: CursorInfoType.EDGE_CURSOR, resOffset: 0, edgeIndex: 4 }} | ${undefined} | ${true}     | ${true}     | ${[[title7, 3]]}
+    //   `(
+    //     "Getting movies in group (first=$first, afer=$afterInfo, last=$last, before=$beforeInfo, offset=$offset)",
+    //     ({
+    //       first,
+    //       afterInfo,
+    //       last,
+    //       beforeInfo,
+    //       offset,
+    //       expPrevPage,
+    //       expNextPage,
+    //       expData,
+    //     }: IPagingInfo) => {
+    //       test("", async () => {
+    //         const { variables, params, variablesObj } = _getGraphQLPagingParams(
+    //           first,
+    //           afterInfo,
+    //           last,
+    //           beforeInfo,
+    //           offset,
+    //           results,
+    //           "movies",
+    //           (result: GraphQLResponse) => {
+    //             const movieGroupsConnection = (
+    //               result.data as Record<string, unknown>
+    //             )["movieGroups"] as IConnection<Partial<IMovieGroup>>;
+    //             return movieGroupsConnection.nodes[0].movies as IConnection<
+    //               Partial<IMovie>
+    //             >;
+    //           }
+    //         );
+
+    //         const result = await testServer.executeOperation({
+    //           query: `query GetMovieGroups${variables} { movieGroups { nodes { name movies${params} { 
+    //           edges { 
+    //             node { title listOrder } 
+    //             cursor 
+    //           }
+    //           pageInfo {
+    //             hasPreviousPage
+    //             hasNextPage
+    //             startCursor
+    //             endCursor
+    //           }
+    //         } } } }`,
+    //           ...variablesObj,
+    //         });
+
+    //         results.push(result);
+
+    //         expect(result.data).toBeTruthy();
+
+    //         if (result.data) {
+    //           const movieGroupsConnection = result.data[
+    //             "movieGroups"
+    //           ] as IConnection<Partial<IMovieGroup>>;
+    //           expect(movieGroupsConnection.edges).not.toBeNull();
+
+    //           const nodes = movieGroupsConnection.nodes;
+
+    //           if (nodes) {
+    //             expect(nodes.length).toBe(1);
+    //             //===
+    //             const row = nodes[0];
+
+    //             expect(row.name).toBe(groupName7);
+
+    //             if (row.movies) {
+    //               const edges = row.movies.edges;
+    //               expect(edges).not.toBeNull();
+
+    //               expect(row.movies.pageInfo.hasPreviousPage).toBe(expPrevPage);
+    //               expect(row.movies.pageInfo.hasNextPage).toBe(expNextPage);
+
+    //               if (edges) {
+    //                 expect(edges.length).toBe(expData.length);
+    //                 //===
+    //                 for (let i = 0; i < edges.length; i++) {
+    //                   const row = edges[i].node;
+
+    //                   expect(row.title).toBe(expData[i][0]);
+    //                   expect(row.listOrder).toBe(expData[i][1]);
+    //                 }
+    //               }
+    //             }
+    //           }
+    //         }
+    //       });
+    //     }
+    //   );
+    // });
 
     describe("Testing groups of movies & group types", () => {
       const groupTypeName = "Director";
@@ -3934,12 +3910,9 @@ describe.each`
         }
       });
 
-      // moveMovieGroup2Type(_gid: ID!, _tid: ID!): Boolean!
-
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
-          query:
-            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+          query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
               moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
             }`,
           variables: {
@@ -4028,8 +4001,7 @@ describe.each`
 
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
-          query:
-            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+          query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
               moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
             }`,
           variables: {
@@ -4083,7 +4055,8 @@ describe.each`
                 const movieGroups = groupType0.movieGroups.nodes;
 
                 const movieGroup0 = movieGroups[0];
-                expect(movieGroup0.name).toBe(groupName);              }
+                expect(movieGroup0.name).toBe(groupName);
+              }
             }
             //===
             const groupType1 = groupTypesConnection.nodes[1];
@@ -4117,8 +4090,7 @@ describe.each`
 
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
-          query:
-            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+          query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
               moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
             }`,
           variables: {
@@ -4126,15 +4098,14 @@ describe.each`
             _tid: groupTypeResult2.data?.addGroupType, // "Writer"
           },
         });
-  
+
         expect(result.errors).toBeUndefined();
         expect(result.data?.moveMovieGroup2Type).toBe(true);
       });
 
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
-          query:
-            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+          query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
               moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
             }`,
           variables: {
@@ -4142,15 +4113,14 @@ describe.each`
             _tid: groupTypeResult3.data?.addGroupType, // "Genre"
           },
         });
-  
+
         expect(result.errors).toBeUndefined();
         expect(result.data?.moveMovieGroup2Type).toBe(true);
       });
 
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
-          query:
-            `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
+          query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
               moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
             }`,
           variables: {
@@ -4158,10 +4128,10 @@ describe.each`
             _tid: groupTypeResult3.data?.addGroupType, // "Genre"
           },
         });
-  
+
         expect(result.errors).toBeUndefined();
         expect(result.data?.moveMovieGroup2Type).toBe(true);
-      });  
+      });
 
       test("Getting all group types", async () => {
         const result2 = await testServer.executeOperation({
@@ -4204,7 +4174,7 @@ describe.each`
                 const movieGroups = groupType0.movieGroups.nodes;
 
                 const movieGroup0 = movieGroups[0];
-                expect(movieGroup0.name).toBe(groupName);              
+                expect(movieGroup0.name).toBe(groupName);
               }
             }
             //===
@@ -4222,10 +4192,10 @@ describe.each`
                 const movieGroups = groupType1.movieGroups.nodes;
 
                 const movieGroup0 = movieGroups[0];
-                expect(movieGroup0.name).toBe(groupName3);              
+                expect(movieGroup0.name).toBe(groupName3);
                 //===
                 const movieGroup1 = movieGroups[1];
-                expect(movieGroup1.name).toBe(groupName4);              
+                expect(movieGroup1.name).toBe(groupName4);
               }
             }
             //===
@@ -4243,28 +4213,26 @@ describe.each`
                 const movieGroups = groupType2.movieGroups.nodes;
 
                 const movieGroup0 = movieGroups[0];
-                expect(movieGroup0.name).toBe(groupName2);              
+                expect(movieGroup0.name).toBe(groupName2);
               }
             }
           }
         }
       });
 
-      test("Move a group of movies to group type", async () => {
+      test("Remove a group of movies from group type", async () => {
         const result = await testServer.executeOperation({
-          query:
-            `mutation RemoveMovieGroupFromType($_gid: ID!) { 
+          query: `mutation RemoveMovieGroupFromType($_gid: ID!) { 
               removeMovieGroupFromType(_gid: $_gid) 
             }`,
           variables: {
             _gid: groupResult4.data?.addMovieGroup, // "Sci-Fi"
           },
         });
-  
+
         expect(result.errors).toBeUndefined();
         expect(result.data?.removeMovieGroupFromType).toBe(true);
-      });  
-
+      });
 
       test("Getting all group types", async () => {
         const result2 = await testServer.executeOperation({
@@ -4307,7 +4275,7 @@ describe.each`
                 const movieGroups = groupType0.movieGroups.nodes;
 
                 const movieGroup0 = movieGroups[0];
-                expect(movieGroup0.name).toBe(groupName);              
+                expect(movieGroup0.name).toBe(groupName);
               }
             }
             //===
@@ -4325,7 +4293,7 @@ describe.each`
                 const movieGroups = groupType1.movieGroups.nodes;
 
                 const movieGroup0 = movieGroups[0];
-                expect(movieGroup0.name).toBe(groupName3);              
+                expect(movieGroup0.name).toBe(groupName3);
               }
             }
             //===
@@ -4343,13 +4311,12 @@ describe.each`
                 const movieGroups = groupType2.movieGroups.nodes;
 
                 const movieGroup0 = movieGroups[0];
-                expect(movieGroup0.name).toBe(groupName2);              
+                expect(movieGroup0.name).toBe(groupName2);
               }
             }
           }
         }
       });
-
     });
 
     /*
