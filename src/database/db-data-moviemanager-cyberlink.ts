@@ -59,7 +59,11 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManagerKnexBase {
 
   private async _createAttachDB(db: DB, dbpath: string): Promise<void> {
     // this creates database if it doeasn't exist
-    knx({ client: "better-sqlite3", connection: { filename: dbpath } });
+    knx({
+      client: "better-sqlite3",
+      connection: { filename: dbpath },
+      useNullAsDefault: true,
+    });
 
     await this.execRetVoid(`ATTACH DATABASE '${dbpath}' AS ${db.name}`);
   }

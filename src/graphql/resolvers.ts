@@ -1,5 +1,4 @@
-import { DataSources } from "apollo-server-core/dist/graphqlOptions";
-import { MoviesDataSource } from "../datasources/movies-data-source";
+import { IContext } from "../context";
 import { IBigInt } from "./bigint";
 import {
   buildConnectionResponse,
@@ -76,14 +75,6 @@ export interface IPositionedMovie extends IMovie {
 
 export interface IIDArgs {
   _id: string;
-}
-
-export interface IDataSources {
-  moviesDataSource: MoviesDataSource;
-}
-
-export interface IContext {
-  dataSources: IDataSources;
 }
 
 const movie_ex_column_names = [
@@ -462,8 +453,9 @@ export const resolvers = {
   },
 
   Query: {
-    movies: async (parent: unknown, args: IConnectionArgs, context: IContext) =>
-      await getMoviesConnection<IMovie>(undefined, args, context),
+    movies: async (parent: unknown, args: IConnectionArgs, context: IContext) => {
+      return await getMoviesConnection<IMovie>(undefined, args, context)
+    },
     movie: async (parent: unknown, { _id }: IIDArgs, context: IContext) => {
       const response = await context.dataSources.moviesDataSource.getMovies(
         undefined,
@@ -622,7 +614,7 @@ export const resolvers = {
       {
         _id,
         movieGroupInfo,
-      }: { _id: number; movieGroupInfo: Record<string, unknown> },
+      }: { _id: string; movieGroupInfo: Record<string, unknown> },
       context: IContext
     ): Promise<boolean> => {
       const { column_names, column_values } =
@@ -630,7 +622,7 @@ export const resolvers = {
 
       try {
         await context.dataSources.moviesDataSource.updateMovieGroup(
-          _id,
+          parseInt(_id),
           column_names,
           column_values
         );
@@ -642,11 +634,11 @@ export const resolvers = {
     },
     deleteMovieGroup: async (
       parent: unknown,
-      { _id }: { _id: number },
+      { _id }: IIDArgs,
       context: IContext
     ): Promise<boolean> => {
       try {
-        await context.dataSources.moviesDataSource.deleteMovieGroup(_id);
+        await context.dataSources.moviesDataSource.deleteMovieGroup(parseInt(_id));
 
         return true;
       } catch (e) {
@@ -672,7 +664,7 @@ export const resolvers = {
       {
         _id,
         groupTypeInfo,
-      }: { _id: number; groupTypeInfo: Record<string, unknown> },
+      }: { _id: string; groupTypeInfo: Record<string, unknown> },
       context: IContext
     ): Promise<boolean> => {
       const { column_names, column_values } =
@@ -680,7 +672,7 @@ export const resolvers = {
 
       try {
         await context.dataSources.moviesDataSource.updateMovieGroupType(
-          _id,
+          parseInt(_id),
           column_names,
           column_values
         );
@@ -692,11 +684,11 @@ export const resolvers = {
     },
     deleteGroupType: async (
       parent: unknown,
-      { _id }: { _id: number },
+      { _id }: IIDArgs,
       context: IContext
     ): Promise<boolean> => {
       try {
-        await context.dataSources.moviesDataSource.deleteMovieGroupType(_id);
+        await context.dataSources.moviesDataSource.deleteMovieGroupType(parseInt(_id));
 
         return true;
       } catch (e) {
@@ -710,13 +702,13 @@ export const resolvers = {
         _mid,
         _gid,
         listOrder,
-      }: { _mid: string; _gid: number; listOrder: number },
+      }: { _mid: string; _gid: string; listOrder: number },
       context: IContext
     ) => {
       try {
         await context.dataSources.moviesDataSource.markMovieGroupMember(
           _mid,
-          _gid,
+          parseInt(_gid),
           listOrder
         );
         return true;
@@ -726,12 +718,12 @@ export const resolvers = {
     },
     unassociateMovieAndMovieGroup: async (
       parent: unknown,
-      { _mid, _gid }: { _mid: string; _gid: number },
+      { _mid, _gid }: { _mid: string; _gid: string },
       context: IContext
     ) => {
       try {
         await context.dataSources.moviesDataSource.unmarkMovieGroupMember(
-          _gid,
+          parseInt(_gid),
           _mid
         );
         return true;
@@ -742,13 +734,13 @@ export const resolvers = {
     // group types & movie groups
     moveMovieGroup2Type: async (
       parent: unknown,
-      { _gid, _tid }: { _gid: number; _tid: number },
+      { _gid, _tid }: { _gid: string; _tid: string },
       context: IContext
     ) => {
       try {
         await context.dataSources.moviesDataSource.moveMovieGroup2AnotherType(
-          _gid,
-          _tid
+          parseInt(_gid),
+          parseInt(_tid)
         );
         return true;
       } catch (e) {
@@ -757,13 +749,13 @@ export const resolvers = {
     },
     removeMovieGroupFromType: async (
       parent: unknown,
-      { _gid }: { _gid: number },
+      { _gid }: { _gid: string },
       context: IContext
     ) => {
       try {
         await context.dataSources.moviesDataSource.moveMovieGroup2NoType(
           0,
-          _gid
+          parseInt(_gid)
         );
         return true;
       } catch (e) {

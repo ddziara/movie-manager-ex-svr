@@ -2,7 +2,7 @@
   "name": "movies-manager-ex-svr",
   "version": "1.0.0",
   "description": "App for Managing Favorite Movies - Server",
-  "main": "index.js",
+  "main": "dist/server.js",
   "scripts": {
     "watch": "concurrently -k -p \"[{name}]\" -n \"TypeScript,Node\" -c \"cyan.bold,green.bold\" \"npm run watch-ts\" \"npm run watch-node\"",
     "watch-node": "nodemon dist/server.js",
@@ -29,6 +29,7 @@
   "dependencies": {
     "apollo-server-core": "^3.9.0",
     "apollo-server-express": "^3.9.0",
+    "dataloader": "^2.1.0",
     "datasource-sql": "^2.0.1",
     "express": "^4.18.1",
     "graphql": "^16.5.0",

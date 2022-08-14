@@ -4,14 +4,15 @@ import express from "express";
 import http from "http";
 import type { IExecutableSchemaDefinition } from "@graphql-tools/schema";
 import { typeDefs } from "./graphql/defs";
-import {
-  IDBDataMovieManagerKnexBaseConstr,
-  MoviesDataSource,
-} from "./datasources/movies-data-source";
+// import {
+//   IDBDataMovieManagerKnexBaseConstr,
+// } from "./datasources/movies-data-source";
 import { AppPlatformType } from "./common/types";
-import { IDataSources, resolvers } from "./graphql/resolvers";
+import { resolvers } from "./graphql/resolvers";
 import knx, { Knex } from "knex";
 import { DataSources } from "apollo-server-core/dist/graphqlOptions";
+import { IContext } from "./context";
+import { IDBDataMovieManagerKnexBaseConstr, MoviesDataSource } from "./datasources/movies-data-source";
 
 async function startApolloServer(
   typeDefs: IExecutableSchemaDefinition["typeDefs"],
@@ -42,6 +43,7 @@ async function startApolloServer(
       connection: {
         filename: getCyberlinkRootDBPath().concat(getCyberlinkRootDBName()),
       },
+      useNullAsDefault: true,
     });
 
     const { DBDataMovieManagerCyberlink } = await import(
@@ -63,18 +65,36 @@ async function startApolloServer(
     dBDataMovieManagerKnexConstr = DBDataMovieManagerPostgres;
   }
 
-  const moviesDataSource = new MoviesDataSource(knex, dBDataMovieManagerKnexConstr);
+  const moviesDataSource = new MoviesDataSource(
+    knex,
+    dBDataMovieManagerKnexConstr
+  );
 
-  await moviesDataSource.init();
+  const getUser = (token: unknown) => {
+    console.log();
+  };
 
   const server = new ApolloServer({
     typeDefs,
     resolvers,
-    dataSources: (): DataSources<IDataSources> =>
-      ({ moviesDataSource } as { moviesDataSource: MoviesDataSource }),
+    context: ({ req }) => {
+      // get the user token from the headers
+      const token = req.headers.authorization || "";
+
+      // try to retrieve a user with the token
+      const user = getUser(token);
+
+      // optionally block the user
+      // we could also check user roles/permissions here
+      // if (!user) throw new AuthorizationError("you must be logged in");
+
+      // add the user to the context
+      return { user };
+    },
+    dataSources: (): DataSources<IContext> => ({ moviesDataSource }),
     csrfPrevention: true,
     cache: "bounded",
-    plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],  
+    plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
   });
   await server.start();
   server.applyMiddleware({ app });
