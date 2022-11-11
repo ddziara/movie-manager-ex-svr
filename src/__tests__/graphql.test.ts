@@ -16,6 +16,7 @@ import { IConnection } from "../graphql/connection";
 import { GraphQLResponse } from "apollo-server-core";
 import { IContext } from "../context";
 import type { IDBDataMovieManagerKnexBaseConstr } from "../datasources/movies-data-source";
+import { IBigInt, unwrapBigInt } from "../graphql/bigint";
 
 jest.setTimeout(600000);
 
@@ -98,8 +99,8 @@ const _updateSearchCriteria = (
   graphQLFieldName: string,
   getConnection?:
     | ((
-        result: GraphQLResponse
-      ) => IConnection<Partial<Record<string, unknown>>>)
+      result: GraphQLResponse
+    ) => IConnection<Partial<Record<string, unknown>>, IBigInt>)
     | undefined
 ) => {
   if (cursorInfo !== undefined) {
@@ -112,8 +113,8 @@ const _updateSearchCriteria = (
     const connection = getConnection
       ? getConnection(results[resIndex])
       : ((results[resIndex].data as Record<string, unknown>)[
-          graphQLFieldName
-        ] as IConnection<Partial<Record<string, unknown>>>);
+        graphQLFieldName
+      ] as IConnection<Partial<Record<string, unknown>>, IBigInt>);
 
     if (cursorInfo.type === CursorInfoType.START_CURSOR) {
       cursor = connection.pageInfo.startCursor;
@@ -151,8 +152,8 @@ const _getGraphQLPagingParams = (
   graphQLFieldName: string,
   getConnection?:
     | ((
-        result: GraphQLResponse
-      ) => IConnection<Partial<Record<string, unknown>>>)
+      result: GraphQLResponse
+    ) => IConnection<Partial<Record<string, unknown>>, IBigInt>)
     | undefined
 ): IGraphQLPagingParams => {
   let variables = "";
@@ -451,6 +452,7 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
+        expect(result.data).toBeTruthy();
 
         if (result.data) {
           expect(result.data.addMovie).toBe(`MOVIE_${mediaFullPath}`);
@@ -462,11 +464,12 @@ describe.each`
             "query GetMovies { movies { edges { node { _id title mediaFullPath } } } }",
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const moviesConnection = result2.data["movies"] as IConnection<
-            Partial<IMovie>
+            Partial<IMovie<IBigInt>>, IBigInt
           >;
           expect(moviesConnection.edges).not.toBeNull();
 
@@ -485,6 +488,7 @@ describe.each`
           variables: { _id: result.data?.addMovie },
         });
 
+        expect(result3.errors).toBeUndefined();
         expect(result3.data).toBeTruthy();
 
         if (result3.data) {
@@ -501,6 +505,7 @@ describe.each`
           variables: { _id: "non-existing" },
         });
 
+        expect(result4.errors).toBeUndefined();
         expect(result4.data).toBeTruthy();
 
         if (result4.data) {
@@ -567,6 +572,7 @@ describe.each`
           variables: { _id: result.data?.addMovie },
         });
 
+        expect(result6.errors).toBeUndefined();
         expect(result6.data).toBeTruthy();
 
         if (result6.data) {
@@ -661,6 +667,7 @@ describe.each`
           variables: { _id: result7.data?.addMovie },
         });
 
+        expect(result8.errors).toBeUndefined();
         expect(result8.data).toBeTruthy();
 
         if (result8.data) {
@@ -716,6 +723,7 @@ describe.each`
           variables: { _id: result.data?.addMovie },
         });
 
+        expect(result10.errors).toBeUndefined();
         expect(result10.data).toBeTruthy();
 
         if (result10.data) {
@@ -762,6 +770,7 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
+        expect(result.data).toBeTruthy();
 
         if (result.data) {
           expect(result.data.addMovie).toBe(`MOVIE_${mediaFullPath}`);
@@ -775,6 +784,7 @@ describe.each`
         });
 
         expect(result2.errors).toBeUndefined();
+        expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           expect(result2.data.addMovie).toBe(`MOVIE_${mediaFullPath2}`);
@@ -788,6 +798,7 @@ describe.each`
         });
 
         expect(result3.errors).toBeUndefined();
+        expect(result3.data).toBeTruthy();
 
         if (result3.data) {
           expect(result3.data.addMovie).toBe(`MOVIE_${mediaFullPath3}`);
@@ -801,6 +812,7 @@ describe.each`
         });
 
         expect(result4.errors).toBeUndefined();
+        expect(result4.data).toBeTruthy();
 
         if (result4.data) {
           expect(result4.data.addMovie).toBe(`MOVIE_${mediaFullPath4}`);
@@ -814,6 +826,7 @@ describe.each`
         });
 
         expect(result5.errors).toBeUndefined();
+        expect(result5.data).toBeTruthy();
 
         if (result5.data) {
           expect(result5.data.addMovie).toBe(`MOVIE_${mediaFullPath5}`);
@@ -911,6 +924,7 @@ describe.each`
             startCursor
             endCursor
           }
+          totalRowsCount { bigIntStr }
         }
       }`,
               ...variablesObj,
@@ -918,11 +932,12 @@ describe.each`
 
             results.push(result);
 
+            expect(result.errors).toBeUndefined();
             expect(result.data).toBeTruthy();
 
             if (result.data) {
               const moviesConnection = result.data["movies"] as IConnection<
-                Partial<IMovie>
+                Partial<IMovie<IBigInt>>, IBigInt
               >;
               expect(moviesConnection.edges).not.toBeNull();
 
@@ -954,6 +969,8 @@ describe.each`
                   );
                 }
               }
+
+              expect(unwrapBigInt(moviesConnection.totalRowsCount)).toBe(BigInt(5));
             }
           });
         }
@@ -976,11 +993,12 @@ describe.each`
       }`,
         });
 
+        expect(result.errors).toBeUndefined();
         expect(result.data).toBeTruthy();
 
         if (result.data) {
           const moviesConnection = result.data["movies"] as IConnection<
-            Partial<IMovie>
+            Partial<IMovie<IBigInt>>, IBigInt
           >;
           expect(moviesConnection.nodes).not.toBeNull();
 
@@ -1059,6 +1077,7 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
+        expect(result.data).toBeTruthy();
 
         if (result.data) {
           expect(parseInt(result.data.addMovieGroup)).toBeGreaterThanOrEqual(1);
@@ -1070,12 +1089,13 @@ describe.each`
             "query GetMovieGroups { movieGroups { edges { node { _id name } } } }",
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const movieGroupsConnection = result2.data[
             "movieGroups"
-          ] as IConnection<Partial<IMovieGroup>>;
+          ] as IConnection<Partial<IMovieGroup<IBigInt>>, IBigInt>;
           expect(movieGroupsConnection.edges).not.toBeNull();
 
           if (movieGroupsConnection.edges) {
@@ -1096,6 +1116,7 @@ describe.each`
           variables: { _id: result.data?.addMovieGroup },
         });
 
+        expect(result3.errors).toBeUndefined();
         expect(result3.data).toBeTruthy();
 
         if (result3.data) {
@@ -1111,6 +1132,7 @@ describe.each`
           variables: { _id: "-1" },
         });
 
+        expect(result4.errors).toBeDefined();
         expect(result4.data).toBeTruthy();
 
         if (result4.data) {
@@ -1150,6 +1172,7 @@ describe.each`
           variables: { _id: result.data?.addMovieGroup },
         });
 
+        expect(result6.errors).toBeUndefined();
         expect(result6.data).toBeTruthy();
 
         if (result6.data) {
@@ -1197,6 +1220,7 @@ describe.each`
           variables: { _id: result7.data?.addMovieGroup },
         });
 
+        expect(result8.errors).toBeUndefined();
         expect(result8.data).toBeTruthy();
 
         if (result8.data) {
@@ -1230,11 +1254,11 @@ describe.each`
           variables: { _id: result.data?.addMovieGroup },
         });
 
+        expect(result10.errors).toBeDefined();
         expect(result10.data).toBeTruthy();
 
         if (result10.data) {
-          const row = result10.data["movieGroup"];
-          expect(row).toBe(null);
+          expect(result10.data["movieGroup"]).toBe(null);
         }
       });
     });
@@ -1266,6 +1290,7 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
+        expect(result.data).toBeTruthy();
 
         if (result.data) {
           expect(parseInt(result.data.addMovieGroup)).toBeGreaterThanOrEqual(1);
@@ -1279,6 +1304,7 @@ describe.each`
         });
 
         expect(result2.errors).toBeUndefined();
+        expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           expect(parseInt(result2.data.addMovieGroup)).toBeGreaterThanOrEqual(
@@ -1294,6 +1320,7 @@ describe.each`
         });
 
         expect(result3.errors).toBeUndefined();
+        expect(result3.data).toBeTruthy();
 
         if (result3.data) {
           expect(parseInt(result3.data.addMovieGroup)).toBeGreaterThanOrEqual(
@@ -1309,6 +1336,7 @@ describe.each`
         });
 
         expect(result4.errors).toBeUndefined();
+        expect(result4.data).toBeTruthy();
 
         if (result4.data) {
           expect(parseInt(result4.data.addMovieGroup)).toBeGreaterThanOrEqual(
@@ -1324,6 +1352,7 @@ describe.each`
         });
 
         expect(result5.errors).toBeUndefined();
+        expect(result5.data).toBeTruthy();
 
         if (result5.data) {
           expect(parseInt(result5.data.addMovieGroup)).toBeGreaterThanOrEqual(
@@ -1428,12 +1457,13 @@ describe.each`
 
             results.push(result);
 
+            expect(result.errors).toBeUndefined();
             expect(result.data).toBeTruthy();
 
             if (result.data) {
               const moviesConnection = result.data[
                 "movieGroups"
-              ] as IConnection<Partial<IMovieGroup>>;
+              ] as IConnection<Partial<IMovieGroup<IBigInt>>, IBigInt>;
               expect(moviesConnection.edges).not.toBeNull();
 
               expect(moviesConnection.pageInfo.hasPreviousPage).toBe(
@@ -1487,12 +1517,13 @@ describe.each`
         }`,
         });
 
+        expect(result52.errors).toBeUndefined();
         expect(result52.data).toBeTruthy();
 
         if (result52.data) {
           const movieGroupsConnection = result52.data[
             "movieGroups"
-          ] as IConnection<Partial<IMovieGroup>>;
+          ] as IConnection<Partial<IMovieGroup<IBigInt>>, IBigInt>;
           expect(movieGroupsConnection.nodes).not.toBeNull();
 
           expect(movieGroupsConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -1542,6 +1573,7 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
+        expect(result.data).toBeTruthy();
 
         if (result.data) {
           expect(parseInt(result.data.addGroupType)).toBeGreaterThanOrEqual(1);
@@ -1553,12 +1585,13 @@ describe.each`
             "query GetGroupTypes { groupTypes { edges { node { _id name description } } } }",
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const groupTypesConnection = result2.data[
             "groupTypes"
-          ] as IConnection<Partial<IGroupType>>;
+          ] as IConnection<Partial<IGroupType>, IBigInt>;
           expect(groupTypesConnection.edges).not.toBeNull();
 
           if (groupTypesConnection.edges) {
@@ -1578,6 +1611,7 @@ describe.each`
           variables: { _id: result.data?.addGroupType },
         });
 
+        expect(result3.errors).toBeUndefined();
         expect(result3.data).toBeTruthy();
 
         if (result3.data) {
@@ -1594,6 +1628,7 @@ describe.each`
           variables: { _id: "-1" },
         });
 
+        expect(result4.errors).toBeUndefined();
         expect(result4.data).toBeTruthy();
 
         if (result4.data) {
@@ -1623,6 +1658,7 @@ describe.each`
           variables: { _id: result.data?.addGroupType },
         });
 
+        expect(result6.errors).toBeUndefined();
         expect(result6.data).toBeTruthy();
 
         if (result6.data) {
@@ -1653,6 +1689,7 @@ describe.each`
           variables: { _id: result7.data?.addGroupType },
         });
 
+        expect(result8.errors).toBeUndefined();
         expect(result8.data).toBeTruthy();
 
         if (result8.data) {
@@ -1678,6 +1715,7 @@ describe.each`
           variables: { _id: result.data?.addGroupType },
         });
 
+        expect(result10.errors).toBeUndefined();
         expect(result10.data).toBeTruthy();
 
         if (result10.data) {
@@ -1719,6 +1757,7 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
+        expect(result.data).toBeTruthy();
 
         if (result.data) {
           expect(parseInt(result.data.addGroupType)).toBeGreaterThanOrEqual(1);
@@ -1732,6 +1771,7 @@ describe.each`
         });
 
         expect(result2.errors).toBeUndefined();
+        expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           expect(parseInt(result2.data.addGroupType)).toBeGreaterThanOrEqual(1);
@@ -1745,6 +1785,7 @@ describe.each`
         });
 
         expect(result3.errors).toBeUndefined();
+        expect(result3.data).toBeTruthy();
 
         if (result3.data) {
           expect(parseInt(result3.data.addGroupType)).toBeGreaterThanOrEqual(1);
@@ -1758,6 +1799,7 @@ describe.each`
         });
 
         expect(result4.errors).toBeUndefined();
+        expect(result4.data).toBeTruthy();
 
         if (result4.data) {
           expect(parseInt(result4.data.addGroupType)).toBeGreaterThanOrEqual(1);
@@ -1771,6 +1813,7 @@ describe.each`
         });
 
         expect(result5.errors).toBeUndefined();
+        expect(result5.data).toBeTruthy();
 
         if (result5.data) {
           expect(parseInt(result5.data.addGroupType)).toBeGreaterThanOrEqual(1);
@@ -1873,12 +1916,13 @@ describe.each`
 
             results.push(result);
 
+            expect(result.errors).toBeUndefined();
             expect(result.data).toBeTruthy();
 
             if (result.data) {
               const groupTypesConnection = result.data[
                 "groupTypes"
-              ] as IConnection<Partial<IGroupType>>;
+              ] as IConnection<Partial<IGroupType>, IBigInt>;
               expect(groupTypesConnection.edges).not.toBeNull();
 
               expect(groupTypesConnection.pageInfo.hasPreviousPage).toBe(
@@ -1935,12 +1979,13 @@ describe.each`
         }`,
         });
 
+        expect(result52.errors).toBeUndefined();
         expect(result52.data).toBeTruthy();
 
         if (result52.data) {
           const groupTypesConnection = result52.data[
             "groupTypes"
-          ] as IConnection<Partial<IMovieGroup>>;
+          ] as IConnection<Partial<IMovieGroup<IBigInt>>, IBigInt>;
           expect(groupTypesConnection.nodes).not.toBeNull();
 
           expect(groupTypesConnection.pageInfo.hasPreviousPage).toBe(false);
@@ -2045,6 +2090,7 @@ describe.each`
         });
 
         expect(groupResult.errors).toBeUndefined();
+        expect(groupResult.data).toBeTruthy();
 
         if (groupResult.data) {
           expect(
@@ -2065,6 +2111,7 @@ describe.each`
         });
 
         expect(movieResult.errors).toBeUndefined();
+        expect(movieResult.data).toBeTruthy();
 
         if (movieResult.data) {
           expect(movieResult.data.addMovie).toBe(`MOVIE_${mediaFullPath}`);
@@ -2077,11 +2124,12 @@ describe.each`
             "query GetMovies { movies { edges { node { _id title mediaFullPath movieGroups { nodes { name } }} } } }",
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const moviesConnection = result2.data["movies"] as IConnection<
-            Partial<IMovie>
+            Partial<IMovie<IBigInt>>, IBigInt
           >;
           expect(moviesConnection.edges).not.toBeNull();
 
@@ -2094,7 +2142,7 @@ describe.each`
 
             if (row0.movieGroups) {
               const movieGroupsConnection = row0.movieGroups as IConnection<
-                Partial<IMovieGroup>
+                Partial<IMovieGroup<IBigInt>>, IBigInt
               >;
               expect(movieGroupsConnection.nodes).not.toBeNull();
 
@@ -2115,6 +2163,7 @@ describe.each`
         });
 
         expect(groupResult2.errors).toBeUndefined();
+        expect(groupResult2.data).toBeTruthy();
 
         if (groupResult2.data) {
           expect(
@@ -2131,6 +2180,7 @@ describe.each`
         });
 
         expect(groupResult3.errors).toBeUndefined();
+        expect(groupResult3.data).toBeTruthy();
 
         if (groupResult3.data) {
           expect(
@@ -2147,6 +2197,7 @@ describe.each`
         });
 
         expect(groupResult4.errors).toBeUndefined();
+        expect(groupResult4.data).toBeTruthy();
 
         if (groupResult4.data) {
           expect(
@@ -2163,6 +2214,7 @@ describe.each`
         });
 
         expect(groupResult5.errors).toBeUndefined();
+        expect(groupResult5.data).toBeTruthy();
 
         if (groupResult5.data) {
           expect(
@@ -2179,6 +2231,7 @@ describe.each`
         });
 
         expect(groupResult6.errors).toBeUndefined();
+        expect(groupResult6.data).toBeTruthy();
 
         if (groupResult6.data) {
           expect(
@@ -2193,11 +2246,12 @@ describe.each`
             "query GetMovies { movies { edges { node { _id title mediaFullPath movieGroups { nodes { name } }} } } }",
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const moviesConnection = result2.data["movies"] as IConnection<
-            Partial<IMovie>
+            Partial<IMovie<IBigInt>>, IBigInt
           >;
           expect(moviesConnection.edges).not.toBeNull();
 
@@ -2210,7 +2264,7 @@ describe.each`
 
             if (row0.movieGroups) {
               const movieGroupsConnection = row0.movieGroups as IConnection<
-                Partial<IMovieGroup>
+                Partial<IMovieGroup<IBigInt>>, IBigInt
               >;
               expect(movieGroupsConnection.nodes).not.toBeNull();
 
@@ -2233,6 +2287,7 @@ describe.each`
           },
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
       });
 
@@ -2246,6 +2301,7 @@ describe.each`
           },
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
       });
 
@@ -2259,6 +2315,7 @@ describe.each`
           },
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
       });
 
@@ -2272,6 +2329,7 @@ describe.each`
           },
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
       });
 
@@ -2285,6 +2343,7 @@ describe.each`
           },
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
       });
 
@@ -2294,11 +2353,12 @@ describe.each`
             "query GetMovies { movies { edges { node { _id title mediaFullPath movieGroups { nodes { name } }} } } }",
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const moviesConnection = result2.data["movies"] as IConnection<
-            Partial<IMovie>
+            Partial<IMovie<IBigInt>>, IBigInt
           >;
           expect(moviesConnection.edges).not.toBeNull();
 
@@ -2311,7 +2371,7 @@ describe.each`
 
             if (row0.movieGroups) {
               const movieGroupsConnection = row0.movieGroups as IConnection<
-                Partial<IMovieGroup>
+                Partial<IMovieGroup<IBigInt>>, IBigInt
               >;
               expect(movieGroupsConnection.nodes).not.toBeNull();
 
@@ -2339,10 +2399,11 @@ describe.each`
           variables: { _id: movieResult.data?.addMovie },
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
-          const movie = result2.data["movie"] as IMovie;
+          const movie = result2.data["movie"] as IMovie<IBigInt>;
 
           expect(movie).not.toBeNull();
 
@@ -2354,7 +2415,7 @@ describe.each`
 
             if (movie.movieGroups) {
               const movieGroupsConnection = movie.movieGroups as IConnection<
-                Partial<IMovieGroup>
+                Partial<IMovieGroup<IBigInt>>, IBigInt
               >;
               expect(movieGroupsConnection.nodes).not.toBeNull();
 
@@ -2382,6 +2443,7 @@ describe.each`
           },
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
       });
 
@@ -2391,11 +2453,12 @@ describe.each`
             "query GetMovies { movies { edges { node { _id title mediaFullPath movieGroups { nodes { name } }} } } }",
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const moviesConnection = result2.data["movies"] as IConnection<
-            Partial<IMovie>
+            Partial<IMovie<IBigInt>>, IBigInt
           >;
           expect(moviesConnection.edges).not.toBeNull();
 
@@ -2408,7 +2471,7 @@ describe.each`
 
             if (row0.movieGroups) {
               const movieGroupsConnection = row0.movieGroups as IConnection<
-                Partial<IMovieGroup>
+                Partial<IMovieGroup<IBigInt>>, IBigInt
               >;
               expect(movieGroupsConnection.nodes).not.toBeNull();
 
@@ -2433,6 +2496,7 @@ describe.each`
         });
 
         expect(groupResult7.errors).toBeUndefined();
+        expect(groupResult7.data).toBeTruthy();
 
         if (groupResult7.data) {
           expect(
@@ -2454,6 +2518,7 @@ describe.each`
         });
 
         expect(movieResult2.errors).toBeUndefined();
+        expect(movieResult2.data).toBeTruthy();
 
         if (movieResult2.data) {
           expect(movieResult2.data.addMovie).toBe(`MOVIE_${mediaFullPath2}`);
@@ -2473,6 +2538,7 @@ describe.each`
         });
 
         expect(movieResult3.errors).toBeUndefined();
+        expect(movieResult3.data).toBeTruthy();
 
         if (movieResult3.data) {
           expect(movieResult3.data.addMovie).toBe(`MOVIE_${mediaFullPath3}`);
@@ -2492,6 +2558,7 @@ describe.each`
         });
 
         expect(movieResult4.errors).toBeUndefined();
+        expect(movieResult4.data).toBeTruthy();
 
         if (movieResult4.data) {
           expect(movieResult4.data.addMovie).toBe(`MOVIE_${mediaFullPath4}`);
@@ -2511,6 +2578,7 @@ describe.each`
         });
 
         expect(movieResult5.errors).toBeUndefined();
+        expect(movieResult5.data).toBeTruthy();
 
         if (movieResult5.data) {
           expect(movieResult5.data.addMovie).toBe(`MOVIE_${mediaFullPath5}`);
@@ -2530,6 +2598,7 @@ describe.each`
         });
 
         expect(movieResult6.errors).toBeUndefined();
+        expect(movieResult6.data).toBeTruthy();
 
         if (movieResult6.data) {
           expect(movieResult6.data.addMovie).toBe(`MOVIE_${mediaFullPath6}`);
@@ -2549,6 +2618,7 @@ describe.each`
         });
 
         expect(movieResult7.errors).toBeUndefined();
+        expect(movieResult7.data).toBeTruthy();
 
         if (movieResult7.data) {
           expect(movieResult7.data.addMovie).toBe(`MOVIE_${mediaFullPath7}`);
@@ -2561,12 +2631,13 @@ describe.each`
             "query GetMovieGroups { movieGroups { edges { node { _id name movies { nodes { title listOrder } } } } } }",
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const movieGroupsConnection = result2.data[
             "movieGroups"
-          ] as IConnection<Partial<IMovieGroup>>;
+          ] as IConnection<Partial<IMovieGroup<IBigInt>>, IBigInt>;
           expect(movieGroupsConnection.edges).not.toBeNull();
 
           if (movieGroupsConnection.edges) {
@@ -2591,7 +2662,7 @@ describe.each`
             expect(row1.name).toBe(groupName);
 
             const moviesConnection1 = row1.movies as IConnection<
-              Partial<IPositionedMovie>
+              Partial<IPositionedMovie<IBigInt>>, IBigInt
             >;
 
             expect(moviesConnection1.nodes).not.toBeNull();
@@ -2615,7 +2686,7 @@ describe.each`
             expect(row2.name).toBe(groupName2);
 
             const moviesConnection2 = row2.movies as IConnection<
-              Partial<IPositionedMovie>
+              Partial<IPositionedMovie<IBigInt>>, IBigInt
             >;
 
             expect(moviesConnection2.nodes).not.toBeNull();
@@ -2639,7 +2710,7 @@ describe.each`
             expect(row3.name).toBe(groupName3);
 
             const moviesConnection3 = row3.movies as IConnection<
-              Partial<IPositionedMovie>
+              Partial<IPositionedMovie<IBigInt>>, IBigInt
             >;
 
             expect(moviesConnection3.nodes).not.toBeNull();
@@ -2663,7 +2734,7 @@ describe.each`
             expect(row4.name).toBe(groupName4);
 
             const moviesConnection4 = row3.movies as IConnection<
-              Partial<IPositionedMovie>
+              Partial<IPositionedMovie<IBigInt>>, IBigInt
             >;
 
             expect(moviesConnection4.nodes).not.toBeNull();
@@ -2687,7 +2758,7 @@ describe.each`
             expect(row5.name).toBe(groupName5);
 
             const moviesConnection5 = row5.movies as IConnection<
-              Partial<IPositionedMovie>
+              Partial<IPositionedMovie<IBigInt>>, IBigInt
             >;
 
             expect(moviesConnection5.nodes).not.toBeNull();
@@ -2697,7 +2768,7 @@ describe.each`
             if (moviesConnection5.nodes) {
               expect(moviesConnection5.nodes.length).toBe(1);
               //===
-              const row5_0 = moviesConnection4.nodes[0];
+              const row5_0 = moviesConnection5.nodes[0];
               expect(row5_0.listOrder).toBe(1);
               expect(row5_0.title).toBe(title);
             }
@@ -2711,7 +2782,7 @@ describe.each`
             expect(row6.name).toBe(groupName7);
 
             const moviesConnection6 = row6.movies as IConnection<
-              Partial<IPositionedMovie>
+              Partial<IPositionedMovie<IBigInt>>, IBigInt
             >;
 
             expect(moviesConnection6.nodes).not.toBeNull();
@@ -2758,6 +2829,7 @@ describe.each`
           variables: { _id: groupResult7.data?.addMovieGroup },
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
@@ -3463,6 +3535,7 @@ describe.each`
         });
 
         expect(groupTypeResult.errors).toBeUndefined();
+        expect(groupTypeResult.data).toBeTruthy();
 
         if (groupTypeResult.data) {
           expect(
@@ -3482,6 +3555,7 @@ describe.each`
         });
 
         expect(groupResult.errors).toBeUndefined();
+        expect(groupResult.data).toBeTruthy();
 
         if (groupResult.data) {
           expect(
@@ -3496,12 +3570,13 @@ describe.each`
             "query GetMovieGroups { movieGroups { edges { node { _id name groupType { name } } } } }",
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const movieGroupsConnection = result2.data[
             "movieGroups"
-          ] as IConnection<Partial<IMovieGroup>>;
+          ] as IConnection<Partial<IMovieGroup<IBigInt>>, IBigInt>;
           expect(movieGroupsConnection.edges).not.toBeNull();
 
           if (movieGroupsConnection.edges) {
@@ -3524,14 +3599,15 @@ describe.each`
       test("Getting given movie group", async () => {
         const result2 = await testServer.executeOperation({
           query: `query GetMovieGroup($_id: ID!) { 
-              movieGroup(_id: $_id) { 
-                _id name groupType { name } 
-              } 
-            }`,
+                  movieGroup(_id: $_id) { 
+                    _id name groupType { name } 
+                  } 
+                }`,
 
           variables: { _id: groupResult.data?.addMovieGroup },
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
@@ -3565,6 +3641,7 @@ describe.each`
         });
 
         expect(movieResult.errors).toBeUndefined();
+        expect(movieResult.data).toBeTruthy();
 
         if (movieResult.data) {
           expect(movieResult.data.addMovie).toBe(`MOVIE_${movieMediaFullPath}`);
@@ -3574,20 +3651,21 @@ describe.each`
       test("Getting given movie", async () => {
         const result = await testServer.executeOperation({
           query: `query GetMovie($_id: ID!) { 
-              movie(_id: $_id) { 
-                _id title mediaFullPath 
-                movieGroups {
-                  nodes { 
-                    groupType {
-                      name
-                    }
-                  }
-                } 
-              } 
-            }`,
+                  movie(_id: $_id) { 
+                    _id title mediaFullPath 
+                    movieGroups {
+                      nodes { 
+                        groupType {
+                          name
+                        }
+                      }
+                    } 
+                  } 
+                }`,
           variables: { _id: movieResult.data?.addMovie },
         });
 
+        expect(result.errors).toBeUndefined();
         expect(result.data).toBeTruthy();
 
         if (result.data) {
@@ -3626,6 +3704,7 @@ describe.each`
         });
 
         expect(groupTypeResult2.errors).toBeUndefined();
+        expect(groupTypeResult2.data).toBeTruthy();
 
         if (groupTypeResult2.data) {
           expect(
@@ -3645,6 +3724,7 @@ describe.each`
         });
 
         expect(groupResult2.errors).toBeUndefined();
+        expect(groupResult2.data).toBeTruthy();
 
         if (groupResult2.data) {
           expect(
@@ -3656,18 +3736,18 @@ describe.each`
       test("Getting all group types", async () => {
         const result = await testServer.executeOperation({
           query: `query GetGroupTypes { 
-              groupTypes { 
-                nodes {
-                  _id name description 
-
-                  movieGroups {
+                  groupTypes { 
                     nodes {
-                      name
+                      _id name description 
+    
+                      movieGroups {
+                        nodes {
+                          name
+                        }
+                      }
                     }
-                  }
-                }
-              } 
-            }`,
+                  } 
+                }`,
         });
 
         expect(result.errors).toBeUndefined();
@@ -3675,7 +3755,7 @@ describe.each`
 
         if (result.data) {
           const groupTypesConnection = result.data["groupTypes"] as IConnection<
-            Partial<IGroupType>
+            Partial<IGroupType>, IBigInt
           >;
           expect(groupTypesConnection.nodes).not.toBeNull();
 
@@ -3725,16 +3805,16 @@ describe.each`
       test("Getting given group type", async () => {
         const result = await testServer.executeOperation({
           query: `query GetGroupType($_id: ID!) { 
-              groupType(_id: $_id) { 
-                _id name description 
-
-                movieGroups {
-                  nodes {
-                    name
-                  }
-                }
-              } 
-            }`,
+                  groupType(_id: $_id) { 
+                    _id name description 
+    
+                    movieGroups {
+                      nodes {
+                        name
+                      }
+                    }
+                  } 
+                }`,
           variables: { _id: groupTypeResult.data?.addGroupType },
         });
 
@@ -3798,6 +3878,7 @@ describe.each`
         });
 
         expect(groupTypeResult.errors).toBeUndefined();
+        expect(groupTypeResult.data).toBeTruthy();
 
         if (groupTypeResult.data) {
           expect(
@@ -3814,6 +3895,7 @@ describe.each`
         });
 
         expect(groupTypeResult2.errors).toBeUndefined();
+        expect(groupTypeResult2.data).toBeTruthy();
 
         if (groupTypeResult2.data) {
           expect(
@@ -3830,6 +3912,7 @@ describe.each`
         });
 
         expect(groupTypeResult3.errors).toBeUndefined();
+        expect(groupTypeResult3.data).toBeTruthy();
 
         if (groupTypeResult3.data) {
           expect(
@@ -3848,6 +3931,7 @@ describe.each`
         });
 
         expect(groupResult.errors).toBeUndefined();
+        expect(groupResult.data).toBeTruthy();
 
         if (groupResult.data) {
           expect(
@@ -3866,6 +3950,7 @@ describe.each`
         });
 
         expect(groupResult2.errors).toBeUndefined();
+        expect(groupResult2.data).toBeTruthy();
 
         if (groupResult2.data) {
           expect(
@@ -3884,6 +3969,7 @@ describe.each`
         });
 
         expect(groupResult3.errors).toBeUndefined();
+        expect(groupResult3.data).toBeTruthy();
 
         if (groupResult3.data) {
           expect(
@@ -3902,6 +3988,7 @@ describe.each`
         });
 
         expect(groupResult4.errors).toBeUndefined();
+        expect(groupResult4.data).toBeTruthy();
 
         if (groupResult4.data) {
           expect(
@@ -3913,8 +4000,8 @@ describe.each`
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
           query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
-              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
-            }`,
+                  moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+                }`,
           variables: {
             _gid: groupResult.data?.addMovieGroup, // "Ridley Scott"
             _tid: groupTypeResult3.data?.addGroupType, // "Genre"
@@ -3922,31 +4009,36 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
-        expect(result.data?.moveMovieGroup2Type).toBe(true);
+        expect(result.data).toBeTruthy();
+
+        if (result.data) {
+          expect(result.data.moveMovieGroup2Type).toBe(true);
+        }
       });
 
       test("Getting all group types", async () => {
         const result2 = await testServer.executeOperation({
           query: `query GetGroupTypes { 
-              groupTypes { 
-                nodes { 
-                  name 
-                  movieGroups { 
+                  groupTypes { 
                     nodes { 
                       name 
+                      movieGroups { 
+                        nodes { 
+                          name 
+                        } 
+                      } 
                     } 
                   } 
-                } 
-              } 
-            }`,
+                }`,
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const groupTypesConnection = result2.data[
             "groupTypes"
-          ] as IConnection<Partial<IGroupType>>;
+          ] as IConnection<Partial<IGroupType>, IBigInt>;
           expect(groupTypesConnection.nodes).not.toBeNull();
 
           if (groupTypesConnection.nodes) {
@@ -4002,8 +4094,8 @@ describe.each`
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
           query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
-              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
-            }`,
+                  moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+                }`,
           variables: {
             _gid: groupResult.data?.addMovieGroup, // "Ridley Scott"
             _tid: groupTypeResult.data?.addGroupType, // "Director"
@@ -4011,31 +4103,36 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
-        expect(result.data?.moveMovieGroup2Type).toBe(true);
+        expect(result.data).toBeTruthy();
+
+        if (result.data) {
+          expect(result.data.moveMovieGroup2Type).toBe(true);
+        }
       });
 
       test("Getting all group types", async () => {
         const result2 = await testServer.executeOperation({
           query: `query GetGroupTypes { 
-              groupTypes { 
-                nodes { 
-                  name 
-                  movieGroups { 
+                  groupTypes { 
                     nodes { 
                       name 
+                      movieGroups { 
+                        nodes { 
+                          name 
+                        } 
+                      } 
                     } 
                   } 
-                } 
-              } 
-            }`,
+                }`,
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const groupTypesConnection = result2.data[
             "groupTypes"
-          ] as IConnection<Partial<IGroupType>>;
+          ] as IConnection<Partial<IGroupType>, IBigInt>;
           expect(groupTypesConnection.nodes).not.toBeNull();
 
           if (groupTypesConnection.nodes) {
@@ -4091,8 +4188,8 @@ describe.each`
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
           query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
-              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
-            }`,
+                  moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+                }`,
           variables: {
             _gid: groupResult2.data?.addMovieGroup, // "Stephen King"
             _tid: groupTypeResult2.data?.addGroupType, // "Writer"
@@ -4100,14 +4197,18 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
-        expect(result.data?.moveMovieGroup2Type).toBe(true);
+        expect(result.data).toBeTruthy();
+
+        if (result.data) {
+          expect(result.data.moveMovieGroup2Type).toBe(true);
+        }
       });
 
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
           query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
-              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
-            }`,
+                  moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+                }`,
           variables: {
             _gid: groupResult3.data?.addMovieGroup, // "Horror"
             _tid: groupTypeResult3.data?.addGroupType, // "Genre"
@@ -4115,14 +4216,18 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
-        expect(result.data?.moveMovieGroup2Type).toBe(true);
+        expect(result.data).toBeTruthy();
+
+        if (result.data) {
+          expect(result.data.moveMovieGroup2Type).toBe(true);
+        }
       });
 
       test("Move a group of movies to group type", async () => {
         const result = await testServer.executeOperation({
           query: `mutation MoveMovieGroup2Type($_gid: ID!, $_tid: ID!) { 
-              moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
-            }`,
+                  moveMovieGroup2Type(_gid: $_gid, _tid: $_tid) 
+                }`,
           variables: {
             _gid: groupResult4.data?.addMovieGroup, // "Sci-Fi"
             _tid: groupTypeResult3.data?.addGroupType, // "Genre"
@@ -4130,31 +4235,36 @@ describe.each`
         });
 
         expect(result.errors).toBeUndefined();
-        expect(result.data?.moveMovieGroup2Type).toBe(true);
+        expect(result.data).toBeTruthy();
+
+        if (result.data) {
+          expect(result.data.moveMovieGroup2Type).toBe(true);
+        }
       });
 
       test("Getting all group types", async () => {
         const result2 = await testServer.executeOperation({
           query: `query GetGroupTypes { 
-              groupTypes { 
-                nodes { 
-                  name 
-                  movieGroups { 
+                  groupTypes { 
                     nodes { 
                       name 
+                      movieGroups { 
+                        nodes { 
+                          name 
+                        } 
+                      } 
                     } 
                   } 
-                } 
-              } 
-            }`,
+                }`,
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const groupTypesConnection = result2.data[
             "groupTypes"
-          ] as IConnection<Partial<IGroupType>>;
+          ] as IConnection<Partial<IGroupType>, IBigInt>;
           expect(groupTypesConnection.nodes).not.toBeNull();
 
           if (groupTypesConnection.nodes) {
@@ -4223,39 +4333,44 @@ describe.each`
       test("Remove a group of movies from group type", async () => {
         const result = await testServer.executeOperation({
           query: `mutation RemoveMovieGroupFromType($_gid: ID!) { 
-              removeMovieGroupFromType(_gid: $_gid) 
-            }`,
+                  removeMovieGroupFromType(_gid: $_gid) 
+                }`,
           variables: {
             _gid: groupResult4.data?.addMovieGroup, // "Sci-Fi"
           },
         });
 
         expect(result.errors).toBeUndefined();
-        expect(result.data?.removeMovieGroupFromType).toBe(true);
+        expect(result.data).toBeTruthy();
+
+        if (result.data) {
+          expect(result.data.removeMovieGroupFromType).toBe(true);
+        }
       });
 
       test("Getting all group types", async () => {
         const result2 = await testServer.executeOperation({
           query: `query GetGroupTypes { 
-              groupTypes { 
-                nodes { 
-                  name 
-                  movieGroups { 
+                  groupTypes { 
                     nodes { 
                       name 
+                      movieGroups { 
+                        nodes { 
+                          name 
+                        } 
+                      } 
                     } 
                   } 
-                } 
-              } 
-            }`,
+                }`,
         });
 
+        expect(result2.errors).toBeUndefined();
         expect(result2.data).toBeTruthy();
 
         if (result2.data) {
           const groupTypesConnection = result2.data[
             "groupTypes"
-          ] as IConnection<Partial<IGroupType>>;
+          ] as IConnection<Partial<IGroupType>, IBigInt>;
           expect(groupTypesConnection.nodes).not.toBeNull();
 
           if (groupTypesConnection.nodes) {
@@ -4318,20 +4433,5 @@ describe.each`
         }
       });
     });
-
-    /*
-      const groupTypeName = "Director";
-      const groupTypeName2 = "Writer";
-      const groupTypeName3 = "Genre";
-      //===
-      const groupName = "Ridley Scott";
-      const groupName2 = "Stephen King";
-      const groupName3 = "Horror";
-      const groupName4 = "Sci-Fi";
-*/
-    /*
-test("", async () => {
-});
-*/
   }
 );

@@ -62,7 +62,8 @@ const _splitResult = <K>(
       id_col_names: [...result.id_col_names],
       foreign_id_name: result.foreign_id_name,
       rows: [],
-      total_count: 0,
+      total_rows_count: BigInt(0),
+      rows_count: BigInt(0),
       reversedOrder: result.reversedOrder,
       offset: result.offset,
     };
@@ -77,11 +78,11 @@ const _splitResult = <K>(
       transIdVal ? transIdVal(id)  : id);
 
       // Note: this is incorrect in fact
-      res.total_count = res.rows.length;
+      res.total_rows_count = BigInt(res.rows.length);
 
       res.rows.forEach(function (this: number, row: RowObject) {
-        row.count = this;
-      }, res.total_count);
+        row.total_count = this;
+      }, res.total_rows_count);
     }
 
     (this as unknown as IGetRowsFunReturn[]).push(res);

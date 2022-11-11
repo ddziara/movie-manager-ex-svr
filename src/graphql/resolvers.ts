@@ -1,10 +1,10 @@
 import { IContext } from "../context";
-import { IBigInt } from "./bigint";
+
 import {
   buildConnectionResponse,
   decodeCursor,
   IConnectionArgs,
-  IConnectionResolver,
+  IConnection,
   // translateConnectionArgs,
 } from "./connection";
 
@@ -17,10 +17,10 @@ export interface IGroupType {
   _id: string;
   name: string;
   description: string;
-  movieGroups: IConnectionResolver<Partial<IMovieGroup>>;
+  movieGroups: IConnection<Partial<IMovieGroup>>;
 }
 
-export interface IMovieGroup {
+export interface IMovieGroup<BI = bigint> {
   _id: string;
   type: number;
   name: string;
@@ -32,21 +32,21 @@ export interface IMovieGroup {
   visible: Visibility;
   custom: string;
   groupType: IGroupType;
-  movies: IConnectionResolver<Partial<IPositionedMovie>>;
+  movies: IConnection<Partial<IPositionedMovie<BI>>, BI>;
 }
 
-export interface IMovie {
+export interface IMovie<BI = bigint> {
   _id: string;
   mediaFullPath: string;
   title: string;
   description: string;
   genre: string;
-  length: IBigInt;
+  length: BI;
   mediaType: number;
-  mediaDuration: bigint;
-  mediaSize: bigint;
+  mediaDuration: BI;
+  mediaSize: BI;
   mediaRating: number;
-  mediaResume: bigint;
+  mediaResume: BI;
   resolutionX: number;
   resolutionY: number;
   aspectRatioX: number;
@@ -66,10 +66,10 @@ export interface IMovie {
   playDate: string;
   studio: string;
   protected: boolean;
-  movieGroups: IConnectionResolver<Partial<IMovieGroup>>;
+  movieGroups: IConnection<Partial<IMovieGroup>, BI>;
 }
 
-export interface IPositionedMovie extends IMovie {
+export interface IPositionedMovie<BI = bigint> extends IMovie<BI> {
   listOrder: number;
 }
 
@@ -126,6 +126,14 @@ interface IArrayParams {
   column_values: unknown[];
 }
 
+/**
+ * Method converts object's pairs "prop/value" to array of names and array of values.
+ * If value is of type "object" then property "bigIntStr" is accessed and 
+ * if it is a string then it is converted to "BigInt" value.
+ * 
+ * @param obj - object to convert
+ * @returns object implementing IArrayParams which contains array of names and array of values
+ */
 const _objParams2ArrayParams = (obj: Record<string, unknown>): IArrayParams => {
   const column_names: string[] = [];
   const column_values: unknown[] = [];
@@ -277,7 +285,7 @@ const getGroupType = async (
 const getGroupTypesConnection = async (
   { first, after, last, before, offset }: IConnectionArgs,
   context: IContext
-): Promise<IConnectionResolver<Partial<IGroupType>>> => {
+): Promise<IConnection<Partial<IGroupType>>> => {
   const response =
     await context.dataSources.moviesDataSource.getMovieGroupTypes(
       undefined,
@@ -315,7 +323,7 @@ const getMovieGroupsConnection = async (
   mid: string | undefined,
   { first, after, last, before, offset }: IConnectionArgs,
   context: IContext
-): Promise<IConnectionResolver<Partial<IMovieGroup>>> => {
+): Promise<IConnection<Partial<IMovieGroup>>> => {
   if (mid !== undefined) {
     // note: it utilizes DataSource caching to avoid duplicated requests
     const response =
@@ -405,7 +413,7 @@ const getMoviesConnection = async <T>(
   gid: number | undefined,
   { first, after, last, before, offset }: IConnectionArgs,
   context: IContext
-): Promise<IConnectionResolver<Partial<T>>> => {
+): Promise<IConnection<Partial<T>>> => {
   const response = await context.dataSources.moviesDataSource.getMovies(
     gid,
     undefined,
@@ -454,7 +462,7 @@ export const resolvers = {
 
   Query: {
     movies: async (parent: unknown, args: IConnectionArgs, context: IContext) => {
-      return await getMoviesConnection<IMovie>(undefined, args, context)
+      return await getMoviesConnection<IMovie>(undefined, args, context);
     },
     movie: async (parent: unknown, { _id }: IIDArgs, context: IContext) => {
       const response = await context.dataSources.moviesDataSource.getMovies(

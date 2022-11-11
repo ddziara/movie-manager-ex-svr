@@ -1,6 +1,11 @@
 import { DBTable } from "./db-table";
 import { ILifeCycleDBData } from "./i-life-cycle-db.data";
 
+export interface ITabInfo {
+  schema?: string;
+  table: string; 
+}
+
 /**
  * Base class representing data source
  */
@@ -23,8 +28,33 @@ export abstract class DBData implements ILifeCycleDBData {
     sql: string,
     ...params: unknown[]
   ): Promise<void>;
+
+  /**
+   * Method transforms SQL query parameter position to parameter string like "?"
+   * 
+   * @param index - 0-based postiion of paremeter in SQL query
+   * @returns parameter string corresponding to "index"
+   */
   protected abstract getSQLParameter(index: number): string;
 
+  // for extra row with total count of rows
+
+  /**
+   * Method returns ordering for total count column, either "DESC" or "ASC"
+   * 
+   * @returns ordering
+   */
+  protected abstract getTotalCountColumnOrdering(): string;
+
+  /**
+   * Method returns some value for column in given table. If 'tabName' is undefined then the first found value for "colName" is returned
+   * 
+   * @param tabInfo - array of [schema]/table pairs or "undefined" when column is ana alias
+   * @param colName - column name
+   */
+  protected abstract getTotalCountRowColumnValue(tabInfo: ITabInfo[] | undefined, colName: string): string;
+
+  //================================================================
   protected _throwIfNotReady() {
     if (!this.ready) throw new Error("Database is not ready");
   }

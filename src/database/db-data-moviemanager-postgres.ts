@@ -16,6 +16,7 @@ import { DBmedia_scanner_cache } from "./db-db-media-scanner-cache";
 import { DBmoviemedia } from "./db-db-moviemedia";
 import { DBplaylist } from "./db-db-playlist";
 import { DBDataMovieManagerKnexBase } from "./db-data-moviemanager-knexs-base";
+import { ITabInfo } from "./db-data";
 // for optional imports [END]
 
 // for optional imports
@@ -75,9 +76,9 @@ export class DBDataMovieManagerPostgres extends DBDataMovieManagerKnexBase {
     tps.setTypeParser(1114, function (val) {
       const dt = new Date(val + "+0000");
       const d_str = dateToUTCString(dt);
-    //  return d_str.substr(0, d_str.length - 3);
+      //  return d_str.substr(0, d_str.length - 3);
       return d_str;
-  });
+    });
 
     //  int8
     tps.setTypeParser(20, function (val) {
@@ -189,7 +190,7 @@ export class DBDataMovieManagerPostgres extends DBDataMovieManagerKnexBase {
    * @param columns - array of names of outputted columns
    * @param params
    */
-   protected async execQuery(
+  protected async execQuery(
     sql: string,
     ...params: unknown[]
   ): Promise<Record<string, unknown>[]> {
@@ -227,6 +228,184 @@ export class DBDataMovieManagerPostgres extends DBDataMovieManagerKnexBase {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected getSQLParameter(index: number): string {
     return `?`;
+  }
+
+
+  protected getTotalCountColumnOrdering(): string {
+    return "ASC"
+  }
+
+  protected getTotalCountRowColumnValue(tabInfo: ITabInfo[] | undefined, colName: string): string {
+    let val;
+
+    const valuesMapNoSchema = {
+      "MediaInfo5": {
+        "folder": "''",
+      }
+    };
+
+    const valuesMap = {
+      [this.dbcldb.name]: {
+        [this.dbcldb.creation_info.name]: {
+          "creationName": "''",
+          "projectPath": "''",
+          "description": "''",
+          "modifyDate": "'1970-01-01'",
+        },
+        [this.dbcldb.face_info.name]: {
+
+        },
+        [this.dbcldb.group_info.name]: {
+          "mediaName": "''",
+          "addDate": "'1970-01-01'",
+          "modifyDate": "'1970-01-01'",
+          "mediaDate": "'1970-01-01'",
+          "orderType": "''",
+          "place": "''",
+          "description": "''",
+          "custom": "",
+          "baseMediaName": "''",
+        },
+        [this.dbcldb.group_order_info.name]: {
+          "orders": "''",
+        },
+        [this.dbcldb.media_info.name]: {
+          "mediaName": "''",
+          "description": "''",
+          "mediaDate": "'1970-01-01'",
+          "addDate": "'1970-01-01'",
+          "modifyDate": "'1970-01-01'",
+          "playDate": "'1970-01-01'",
+          "protected": "'FALSE'",
+          "videoMeta": "''",
+          "title": "''",
+          "artist": "''",
+          "genre": "''",
+          "albumTitle": "''",
+          "albumArtist": "''",
+          "composer": "''",
+          "bUploadFlicker": "FALSE",
+          "bUploadFacebook": "FALSE",
+          "bUploadYouTube": "FALSE",
+          "stereoType": "''",
+          "custom": "''",
+          "bAlbumArt": "FALSE",
+        },
+        [this.dbcldb.order_info.name]: {
+          "orders": "''",
+        },
+        [this.dbcldb.person_info.name]: {
+          "birthday": "'1970-01-01'",
+        },
+      },
+      [this.dbextra.name]: {
+        [this.dbextra.moviegrouptype.name]: {
+          "name": "''",
+          "description": "''",
+        },
+        [this.dbextra.moviegrouptypemoviegroup.name]: {
+
+        },
+      },
+      [this.dbmediaScannerCache.name]: {
+        [this.dbmediaScannerCache.mtcache_movie_scan_context.name]: {
+          "folder": "''",
+          "filename": "''",
+          "isFiltered": "FALSE",
+        },
+        [this.dbmediaScannerCache.mtcache_music_scan_context.name]: {
+          "folder": "''",
+          "filename": "''",
+          "isFiltered": "FALSE",
+        },
+        [this.dbmediaScannerCache.mtcache_photo_scan_context.name]: {
+          "folder": "''",
+          "filename": "''",
+          "isFiltered": "FALSE",
+        },
+        [this.dbmediaScannerCache.mtcache_video_scan_context.name]: {
+          "folder": "''",
+          "filename": "''",
+          "isFiltered": "FALSE",
+        },
+        [this.dbmediaScannerCache.postscan_movie_scan_context.name]: {
+          "folder": "''",
+          "filename": "''",
+        },
+        [this.dbmediaScannerCache.postscan_music_scan_context.name]: {
+          "folder": "''",
+          "filename": "''",
+        },
+        [this.dbmediaScannerCache.postscan_photo_scan_context.name]: {
+          "folder": "''",
+          "filename": "''",
+        },
+        [this.dbmediaScannerCache.postscan_video_scan_context.name]: {
+          "folder": "''",
+          "filename": "''",
+        },
+      },
+      [this.dbmoviemedia.name]: {
+        [this.dbmoviemedia.media_info.name]: {
+          "modifyDate": "'1970-01-01'",
+          "releaseDate": "'1970-01-01'",
+          "isMovieFolder": "FALSE",
+          "stereoType": "''",
+          "title": "''",
+          "playDate": "'1970-01-01'",
+          "infoFilePath": "''",
+          "description": "''",
+          "studio": "''",
+          "genre": "''",
+          "addDate": "'1970-01-01'",
+          "mediaFullPath": "''",
+          "protected": "FALSE",
+          "_id": "''",
+        },
+      },
+      [this.dbplaylist.name]: {
+        [this.dbplaylist.playiteminfo.name]: {
+          "mediaTitle": "''",
+          "mediaID": "''",
+        },
+        [this.dbplaylist.playlistinfo.name]: {
+          "name": "''",
+          "addDate": "'1970-01-01'",
+          "mediaDate": "'1970-01-01'",
+          "modifyDate": "'1970-01-01'",
+          "place": "''",
+          "description": "''",
+          "custom": "''",
+        },
+      }
+    };
+
+    const valuesMapAlias = {
+      "mid": "''",
+    };  
+
+    if (tabInfo) {
+      for(const tabinfoElem of tabInfo) {
+        if(tabinfoElem.schema !== undefined) {
+          const schemaObj = valuesMap[tabinfoElem.schema];
+          const tabObj = schemaObj[tabinfoElem.table];
+
+          val = tabObj[colName as keyof typeof tabObj];  
+        }
+        else {
+          const tabObj = valuesMapNoSchema[tabinfoElem.table as keyof typeof valuesMapNoSchema];
+
+          val = tabObj[colName as keyof typeof tabObj];
+        }
+
+        if(val !== undefined) break;
+      }      
+    }
+    else { // when alias
+      val = valuesMapAlias[colName as keyof typeof valuesMapAlias];
+    }
+
+    return typeof val === "string" ? val : "0";
   }
 
   //=====================

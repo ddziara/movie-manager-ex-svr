@@ -19,6 +19,7 @@ import {
   getCyberlinkRootDBPath,
 } from "./db-path-cyberlink";
 import { DBDataMovieManagerKnexBase } from "./db-data-moviemanager-knexs-base";
+import { ITabInfo } from "./db-data";
 
 export interface IBetterSQqliteRunReturn {
   changes?: number;
@@ -247,6 +248,14 @@ export class DBDataMovieManagerCyberlink extends DBDataMovieManagerKnexBase {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected getSQLParameter(index: number): string {
     return `?`;
+  }
+
+  protected getTotalCountColumnOrdering(): string {
+    return "DESC"
+  }
+
+  protected getTotalCountRowColumnValue(tabInfo: ITabInfo[] | undefined, colName: string): string {
+    return "''";
   }
 
   //=====================

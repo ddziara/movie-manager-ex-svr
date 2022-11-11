@@ -22,16 +22,11 @@ export interface IEdge<T> {
   cursor: string;
 }
 
-export interface IConnection<T> {
-  edges: IEdge<T>[] | null;
-  nodes: T[];
-  pageInfo: IPageInfo;
-}
-
-export interface IConnectionResolver<T> {
+export interface IConnection<T, BI = bigint> {
   edges: IEdge<T>[] | null;
   nodes: T[] | null;
   pageInfo: IPageInfo;
+  totalRowsCount: BI;
 }
 
 export const decodeCursor = (cursorStr: string): Record<string, unknown> => {
@@ -61,7 +56,7 @@ export const buildConnectionResponse = <T>(
   hasNextPage: boolean,
   cursorFields: string[],
   extraFields?: Record<string, unknown> | (() => Record<string, unknown>)
-): IConnectionResolver<Partial<T>> => {
+): IConnection<Partial<T>> => {
   const rows = extraFields
     ? response.rows.map((row) => ({
         ...row,
@@ -99,14 +94,14 @@ export const buildConnectionResponse = <T>(
       const hasNextPageFromOffset =
         response.offset !== undefined ? response.offset > 0 : false;
 
-      hasPreviousPage2 = response.total_count > edges.length + actualOffset;
+      hasPreviousPage2 = response.rows_count ? response.rows_count > edges.length + actualOffset : false;
       hasNextPage2 = hasNextPage || hasNextPageFromOffset;
     } else {
       const hasPreviousPageFromOffset =
         response.offset !== undefined ? response.offset > 0 : false;
 
       hasPreviousPage2 = hasPreviousPage || hasPreviousPageFromOffset;
-      hasNextPage2 = response.total_count > edges.length + actualOffset;
+      hasNextPage2 = response.rows_count ? response.rows_count > edges.length + actualOffset : false;
     }
 
     // note: assuming correct order of rows
@@ -114,7 +109,7 @@ export const buildConnectionResponse = <T>(
     endCursor = edges[edges.length - 1].cursor;
   }
 
-  const connection: IConnectionResolver<Partial<T>> = {
+  const connection: IConnection<Partial<T>> = {
     edges,
     nodes: rows as unknown as Partial<T>[],
     pageInfo: {
@@ -123,6 +118,7 @@ export const buildConnectionResponse = <T>(
       startCursor,
       endCursor,
     },
+    totalRowsCount: response.total_rows_count !== undefined ? response.total_rows_count : BigInt(0)
   };
 
   return connection;

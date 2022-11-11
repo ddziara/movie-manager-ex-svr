@@ -50,11 +50,12 @@ interface IPostgresRawExecRetIDPublic {
 
 jest.setTimeout(6000000);
 // ${"cyberlink"}
+// ${"postgres"}
 
 describe.each`
   appPlatform
   ${"cyberlink"}
-  ${"postgres"}
+  ${"postgres"} 
 `(
   `Checking database code`,
   ({ appPlatform }: { appPlatform: AppPlatformType }) => {
@@ -251,7 +252,7 @@ describe.each`
         const mocked = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecQueryPublic,
             "execQuery"
           )
@@ -323,12 +324,12 @@ describe.each`
         const mocked = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecQueryPublic,
             "execQuery"
           )
           .mockImplementation(async () => {
-            return [];
+            return [{ _id: "", title: "", total_count: 0, count: null }];
           });
 
         await expect(
@@ -356,7 +357,7 @@ describe.each`
         const mocked = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecQueryPublic,
             "execQuery"
           )
@@ -369,7 +370,7 @@ describe.each`
         );
 
         mocked.mockImplementation(async () => {
-          return [{}];
+          return [{ playlistID: 0, total_count: 1, count: null }, { playlistID: 0, total_count: null, count: 1 }];
         });
 
         await expect(moviesDataSource.deleteMovieGroup(0)).rejects.toThrow(
@@ -391,17 +392,17 @@ describe.each`
         const mocked = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecQueryPublic,
             "execQuery"
           )
           .mockImplementation(async (sql: string) => {
             if (sql.includes("PlayListInfo")) {
-              return [{}];
+              return [{ _id: 1, total_count: 1, count: 1 }, { _id: 0, total_count: 1, count: null }];
             } else if (sql.includes("MovieGroupTypes")) {
-              return [{}];
+              return [{ _id: 1, total_count: 1, count: 1 }, { _id: 0, total_count: 1, count: null }];
             } else if (sql.includes("MovieGroupTypeMovieGroups")) {
-              return [{}];
+              return [{ mgid: 1, total_count: 1, count: 1 }, { mgid: 0, total_count: 1, count: null }];
             }
 
             return [];
@@ -436,7 +437,7 @@ describe.each`
         const mocked2 = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecQueryPublic,
             "execQuery"
           )
@@ -447,7 +448,7 @@ describe.each`
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
               ...params: unknown[]
             ): Promise<Record<string, unknown>[]> => {
-              return [];
+              return [{ _id: "", title: "", mediaFullPath: "", folder: "", total_count: 0, count: null }];
             }
           );
 
@@ -479,7 +480,7 @@ describe.each`
         const mocked1 = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecQueryPublic,
             "execQuery"
           )
@@ -490,7 +491,7 @@ describe.each`
               ...params: unknown[]
             ): Promise<Record<string, unknown>[]> => {
               if (sql.includes("PlayListInfo")) {
-                return [{}];
+                return [{ _id: 1, total_count: 1, count: 1 }, { _id: 0, total_count: 1, count: null }];
               } else if (sql.includes("PlayItemInfo")) {
                 return [{ count: 0 }];
               }
@@ -502,7 +503,7 @@ describe.each`
         const mocked2 = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecRetIDPublic,
             "execRetID"
           )
@@ -552,7 +553,7 @@ describe.each`
         const mocked = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecRetVoidPublic,
             "execRetVoid"
           )
@@ -600,7 +601,7 @@ describe.each`
         const mocked = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecQueryPublic,
             "execQuery"
           )
@@ -611,7 +612,7 @@ describe.each`
               ...params: unknown[]
             ): Promise<Record<string, unknown>[]> => {
               if (sql.includes("PlayListInfo")) {
-                return [];
+                return [{ _id: 0, total_count: 0, count: null }];
               }
 
               return [];
@@ -625,7 +626,7 @@ describe.each`
         jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecQueryPublic,
             "execQuery"
           )
@@ -636,9 +637,9 @@ describe.each`
               ...params: unknown[]
             ): Promise<Record<string, unknown>[]> => {
               if (sql.includes("PlayListInfo")) {
-                return [{}];
+                return [{ _id: null, total_count: 1, count: 1 }, { _id: 0, total_count: 0, count: null }];
               } else if (sql.includes("MediaInfo")) {
-                return [];
+                return [{ title: "", total_count: 0, count: null }];
               }
 
               return [];
@@ -652,7 +653,7 @@ describe.each`
         jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecQueryPublic,
             "execQuery"
           )
@@ -663,11 +664,11 @@ describe.each`
               ...params: unknown[]
             ): Promise<Record<string, unknown>[]> => {
               if (sql.includes("PlayListInfo")) {
-                return [{}];
+                return [{ _id: null, total_count: 1, count: 1 }, { _id: 0, total_count: 0, count: null }];
               } else if (sql.includes("MediaInfo")) {
-                return [{ title: "Scary Movie" }];
+                return [{ title: "Scary Movie", total_count: 1, count: 1 }, { title: "", total_count: 1, count: null }];
               } else if (sql.includes("PlayItemInfo")) {
-                return [{}];
+                return [{ _id: 1, total_count: 1, count: 1 }, { _id: 0, total_count: 1, count: null }];
               }
 
               return [];
@@ -693,7 +694,7 @@ describe.each`
         const mocked = jest
           .spyOn(
             moviesDataSource[
-              "_dbDataMovieManager"
+            "_dbDataMovieManager"
             ] as unknown as IExecRetVoidPublic,
             "execRetVoid"
           )
@@ -729,7 +730,7 @@ describe.each`
           const mocked = jest
             .spyOn(
               moviesDataSource[
-                "_dbDataMovieManager"
+              "_dbDataMovieManager"
               ] as unknown as IBetterSqliteRawExecRetIDPublic,
               "_rawExecRetID"
             )
@@ -976,7 +977,7 @@ describe.each`
           const mocked = jest
             .spyOn(
               moviesDataSource[
-                "_dbDataMovieManager"
+              "_dbDataMovieManager"
               ] as unknown as IPostgresRawExecRetIDPublic,
               "_rawExecRetID"
             )
@@ -1228,10 +1229,10 @@ describe.each`
 
       // get added movie group
       const result = await moviesDataSource.getMovieGroups(undefined, gid);
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(1);
       expect(
         result.rows[0][convertReportedColumnName(column_names[0])] ===
-          column_values[0]
+        column_values[0]
       );
 
       // update the movie group 'name' column
@@ -1246,10 +1247,10 @@ describe.each`
 
       // get updated group
       const result2 = await moviesDataSource.getMovieGroups(undefined, gid);
-      expect(result2.total_count).toBe(1);
+      expect(result2.total_rows_count).toBe(1);
       expect(
         result2.rows[0][convertReportedColumnName(column_names2[0])] ===
-          column_values2[0]
+        column_values2[0]
       );
 
       // delete the movie group
@@ -1288,7 +1289,7 @@ describe.each`
 
       // get gropus of any type (=0)
       const result = await moviesDataSource.getMovieGroups(0, undefined);
-      expect(result.total_count).toBe(0);
+      expect(result.total_rows_count).toBe(BigInt(0));
 
       // removing group from non-existing type
       await expect(
@@ -1338,7 +1339,7 @@ describe.each`
 
       // getting type group (existing typeid/existing groupid)
       const result2 = await moviesDataSource.getMovieGroups(tid, gid);
-      expect(result2.total_count).toBe(1);
+      expect(result2.total_rows_count).toBe(BigInt(1));
       expect(result2.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result2.rows[0][convertReportedColumnName("name")]).toBe(
         column_values3[0]
@@ -1352,7 +1353,7 @@ describe.each`
 
       // getting type group (existing typeid)
       const result3 = await moviesDataSource.getMovieGroups(tid, undefined);
-      expect(result3.total_count).toBe(1);
+      expect(result3.total_rows_count).toBe(BigInt(1));
       expect(result3.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result3.rows[0][convertReportedColumnName("name")]).toBe(
         column_values3[0]
@@ -1372,7 +1373,7 @@ describe.each`
 
       // getting type group (existing typeid/existing groupid)
       const result4 = await moviesDataSource.getMovieGroups(undefined, gid2);
-      expect(result4.total_count).toBe(1);
+      expect(result4.total_rows_count).toBe(1);
       expect(result4.rows[0][convertReportedColumnName("_id")]).toBe(gid2);
       expect(result4.rows[0][convertReportedColumnName("name")]).toBe(
         column_values4[0]
@@ -1391,7 +1392,7 @@ describe.each`
 
       // getting type group (existing typeid/existing groupid)
       const result5 = await moviesDataSource.getMovieGroups(undefined, gid);
-      expect(result5.total_count).toBe(1);
+      expect(result5.total_rows_count).toBe(1);
       expect(result5.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result5.rows[0][convertReportedColumnName("name")]).toBe(
         column_values3[0]
@@ -1413,7 +1414,7 @@ describe.each`
 
       // getting type group (existing groupid)
       const result6 = await moviesDataSource.getMovieGroups(undefined, gid);
-      expect(result6.total_count).toBe(1);
+      expect(result6.total_rows_count).toBe(1);
       expect(result6.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result6.rows[0][convertReportedColumnName("name")]).toBe(
         column_values3[0]
@@ -1432,7 +1433,7 @@ describe.each`
 
       // getting type group (existing groupid)
       const result7 = await moviesDataSource.getMovieGroups(undefined, gid);
-      expect(result7.total_count).toBe(1);
+      expect(result7.total_rows_count).toBe(1);
       expect(result7.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result7.rows[0][convertReportedColumnName("name")]).toBe(
         column_values3[0]
@@ -1446,7 +1447,7 @@ describe.each`
 
       // getting type group (existing typeid/existing groupid)
       const result8 = await moviesDataSource.getMovieGroups(undefined, gid);
-      expect(result8.total_count).toBe(1);
+      expect(result8.total_rows_count).toBe(1);
       expect(result8.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result8.rows[0][convertReportedColumnName("name")]).toBe(
         column_values3[0]
@@ -1466,7 +1467,7 @@ describe.each`
 
       // getting type group (existing typeid)
       const result9 = await moviesDataSource.getMovieGroups(0, undefined);
-      expect(result9.total_count).toBe(2);
+      expect(result9.total_rows_count).toBe(BigInt(2));
       const indx_gid2 = result9.rows.findIndex(
         (row) => row[convertReportedColumnName("_id")] === gid2
       );
@@ -1501,7 +1502,7 @@ describe.each`
         undefined,
         undefined
       );
-      expect(result.total_count).toBe(0);
+      expect(result.total_rows_count).toBe(0);
     });
 
     test(`checking getting movie groups`, async () => {
@@ -1573,7 +1574,7 @@ describe.each`
         undefined,
         undefined
       );
-      expect(result.total_count).toBe(4);
+      expect(result.total_rows_count).toBe(4);
       const indx_gid = result.rows.findIndex(
         (row) => row[convertReportedColumnName("_id")] === gid
       );
@@ -1627,7 +1628,7 @@ describe.each`
 
       // //========================================================================================================
       const result2 = await moviesDataSource.getMovieGroups(tid1, undefined);
-      expect(result2.total_count).toBe(2);
+      expect(result2.total_rows_count).toBe(BigInt(2));
       const indx_gida = result2.rows.findIndex(
         (row) => row[convertReportedColumnName("_id")] === gid
       );
@@ -1657,7 +1658,7 @@ describe.each`
 
       // //========================================================================================================
       const result3 = await moviesDataSource.getMovieGroups(tid2, undefined);
-      expect(result3.total_count).toBe(1);
+      expect(result3.total_rows_count).toBe(BigInt(1));
       expect(result3.rows[0][convertReportedColumnName("_id")]).toBe(gid3);
       expect(result3.rows[0][convertReportedColumnName("name")]).toBe(
         column_values5[0]
@@ -1666,7 +1667,7 @@ describe.each`
 
       // //========================================================================================================
       const result4 = await moviesDataSource.getMovieGroups(0, undefined);
-      expect(result4.total_count).toBe(1);
+      expect(result4.total_rows_count).toBe(BigInt(1));
       expect(result4.rows[0][convertReportedColumnName("_id")]).toBe(gid4);
       expect(result4.rows[0][convertReportedColumnName("name")]).toBe(
         column_values6[0]
@@ -2001,7 +2002,7 @@ describe.each`
 
       // //========================================================================================================
       const result = await moviesDataSource.getMovieGroupTypes(tid);
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(BigInt(1));
       expect(result.rows[0][convertReportedColumnName("_id")]).toBe(tid);
       expect(result.rows[0][convertReportedColumnName("name")]).toBe(
         column_values[0]
@@ -2023,7 +2024,7 @@ describe.each`
 
       // //========================================================================================================
       const result2 = await moviesDataSource.getMovieGroupTypes(undefined);
-      expect(result2.total_count).toBe(1);
+      expect(result2.total_rows_count).toBe(1);
       expect(result2.rows[0][convertReportedColumnName("_id")]).toBe(tid);
       expect(result2.rows[0][convertReportedColumnName("name")]).toBe(
         column_values2[0]
@@ -2039,7 +2040,7 @@ describe.each`
 
       // //========================================================================================================
       const result3 = await moviesDataSource.getMovieGroupTypes(tid);
-      expect(result3.total_count).toBe(0);
+      expect(result3.total_rows_count).toBe(BigInt(0));
     });
 
     test(`checking removing type referenced by a group`, async () => {
@@ -2057,7 +2058,7 @@ describe.each`
 
       // //========================================================================================================
       const result = await moviesDataSource.getMovieGroupTypes(tid);
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(BigInt(1));
       expect(result.rows[0][convertReportedColumnName("_id")]).toBe(tid);
       expect(result.rows[0][convertReportedColumnName("name")]).toBe(
         column_values[0]
@@ -2079,7 +2080,7 @@ describe.each`
 
       // //========================================================================================================
       const result2 = await moviesDataSource.getMovieGroups(tid, gid);
-      expect(result2.total_count).toBe(1);
+      expect(result2.total_rows_count).toBe(BigInt(1));
       expect(result2.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result2.rows[0][convertReportedColumnName("name")]).toBe(
         column_values2[0]
@@ -2098,7 +2099,7 @@ describe.each`
 
       // //========================================================================================================
       const result = await moviesDataSource.getMovieGroupTypes(undefined);
-      expect(result.total_count).toBe(0);
+      expect(result.total_rows_count).toBe(0);
     });
 
     test(`checking getting types`, async () => {
@@ -2135,7 +2136,7 @@ describe.each`
       //========================================================================================================
       // Note: rows are ordered alphabetically
       const result = await moviesDataSource.getMovieGroupTypes(undefined);
-      expect(result.total_count).toBe(3);
+      expect(result.total_rows_count).toBe(3);
       expect(result.rows[0][convertReportedColumnName("_id")]).toBe(tid);
       expect(result.rows[0][convertReportedColumnName("name")]).toBe(
         column_values[0]
@@ -2240,7 +2241,7 @@ describe.each`
 
       //========================================================================================================
       const result = await moviesDataSource.getMovies(undefined, mid);
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(1);
 
       expect(result.rows[0][convertReportedColumnName("_id")]).toBe(mid);
       expect(result.rows[0][convertReportedColumnName(`title`)]).toBe(
@@ -2274,7 +2275,7 @@ describe.each`
 
       //========================================================================================================
       const result2 = await moviesDataSource.getMovies(undefined, mid2);
-      expect(result2.total_count).toBe(1);
+      expect(result2.total_rows_count).toBe(1);
 
       expect(result2.rows[0][convertReportedColumnName("_id")]).toBe(mid2);
       expect(result2.rows[0][convertReportedColumnName(`title`)]).toBe(
@@ -2295,7 +2296,7 @@ describe.each`
 
       // //========================================================================================================
       const result3 = await moviesDataSource.getMovies(undefined, mid);
-      expect(result3.total_count).toBe(0);
+      expect(result3.total_rows_count).toBe(0);
     });
 
     test(`checking getting movies when no movies`, async () => {
@@ -2304,7 +2305,7 @@ describe.each`
 
       // //========================================================================================================
       const result = await moviesDataSource.getMovies(undefined, undefined);
-      expect(result.total_count).toBe(0);
+      expect(result.total_rows_count).toBe(0);
     });
 
     test(`checking getting movies`, async () => {
@@ -2345,7 +2346,7 @@ describe.each`
 
       //========================================================================================================
       const result = await moviesDataSource.getMovies(undefined, undefined);
-      expect(result.total_count).toBe(2);
+      expect(result.total_rows_count).toBe(2);
 
       expect(result.rows[0][convertReportedColumnName("_id")]).toBe(mid);
       expect(result.rows[0][convertReportedColumnName(`title`)]).toBe(
@@ -2481,7 +2482,7 @@ describe.each`
         ]
       );
 
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(1);
       expect(result.rows[0][convertReportedColumnName("type")]).toBe(0);
       expect(result.rows[0][convertReportedColumnName("name")]).toBe(
         column_values[0]
@@ -2549,7 +2550,7 @@ describe.each`
         "thumbnailResolutionX",
       ]);
 
-      expect(result2.total_count).toBe(1);
+      expect(result2.total_rows_count).toBe(1);
       expect(result2.rows[0][convertReportedColumnName("modifyDate")]).toMatch(
         timestamp_regexpr
       );
@@ -2628,7 +2629,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result3.total_count).toBe(1);
+      expect(result3.total_rows_count).toBe(BigInt(1));
       expect(result3.rows[0][convertReportedColumnName("type")]).toBe(1);
       expect(result3.rows[0][convertReportedColumnName("playlistID")]).toBe(
         gid
@@ -2706,7 +2707,7 @@ describe.each`
       expect(moviesDataSource.ready).toBeTruthy();
 
       const result = await moviesDataSource.getMovies(1, undefined);
-      expect(result.total_count).toBe(0);
+      expect(result.total_rows_count).toBe(BigInt(0));
     });
 
     // Warning: Do not remove paging test 'cause it may be used in the future
@@ -2876,7 +2877,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(BigInt(1));
       expect(result.rows[0][convertReportedColumnName("type")]).toBe(1);
       expect(result.rows[0][convertReportedColumnName("playlistID")]).toBe(gid);
       expect(result.rows[0][convertReportedColumnName("mediaTitle")]).toBe(
@@ -2899,7 +2900,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result2.total_count).toBe(0);
+      expect(result2.total_rows_count).toBe(BigInt(0));
     });
 
     test(`checking getting groups of a movie when no rows`, async () => {
@@ -2990,15 +2991,15 @@ describe.each`
 
       //========================================================================================================
       const result = await moviesDataSource.getGroupsOfMovie(mid);
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(BigInt(1));
       expect(result.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result.rows[0][convertReportedColumnName("name")]).toBe(
         column_values2[0]
       );
 
       //========================================================================================================
-      const result2 = await moviesDataSource.getGroupsOfMovie(mid);
-      expect(result2.total_count).toBe(1);
+      const result2 = await moviesDataSource.getGroupsOfMovie(mid2);
+      expect(result2.total_rows_count).toBe(BigInt(1));
       expect(result2.rows[0][convertReportedColumnName("_id")]).toBe(gid);
       expect(result2.rows[0][convertReportedColumnName("name")]).toBe(
         column_values2[0]
@@ -3011,7 +3012,7 @@ describe.each`
 
       //========================================================================================================
       const result3 = await moviesDataSource.getGroupsOfMovie(mid);
-      expect(result3.total_count).toBe(2);
+      expect(result3.total_rows_count).toBe(BigInt(2));
       expect(result3.rows[0][convertReportedColumnName("_id")]).toBe(gid2);
       expect(result3.rows[0][convertReportedColumnName("name")]).toBe(
         column_values3[0]
@@ -3059,7 +3060,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(BigInt(1));
       expect(result.rows[0][convertReportedColumnName("type")]).toBe(1);
       expect(result.rows[0][convertReportedColumnName("playlistID")]).toBe(gid);
       expect(result.rows[0][convertReportedColumnName("mediaTitle")]).toBe(
@@ -3112,7 +3113,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(BigInt(1));
       expect(result.rows[0][convertReportedColumnName("type")]).toBe(1);
       expect(result.rows[0][convertReportedColumnName("playlistID")]).toBe(gid);
       expect(result.rows[0][convertReportedColumnName("mediaTitle")]).toBe(
@@ -3135,7 +3136,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result2.total_count).toBe(0);
+      expect(result2.total_rows_count).toBe(BigInt(0));
     });
 
     test(`checking adding movie with a group and 'listOrder' parameter in template`, async () => {
@@ -3462,7 +3463,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result.total_count).toBe(1);
+      expect(result.total_rows_count).toBe(BigInt(1));
       expect(result.rows[0][convertReportedColumnName("type")]).toBe(1);
       expect(result.rows[0][convertReportedColumnName("playlistID")]).toBe(gid);
       expect(result.rows[0][convertReportedColumnName("mediaTitle")]).toBe(
@@ -3485,7 +3486,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result2.total_count).toBe(2);
+      expect(result2.total_rows_count).toBe(BigInt(2));
       expect(result2.rows[0][convertReportedColumnName("type")]).toBe(1);
       expect(result2.rows[0][convertReportedColumnName("playlistID")]).toBe(
         gid
@@ -3522,7 +3523,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result3.total_count).toBe(3);
+      expect(result3.total_rows_count).toBe(BigInt(3));
       expect(result3.rows[0][convertReportedColumnName("type")]).toBe(1);
       expect(result3.rows[0][convertReportedColumnName("playlistID")]).toBe(
         gid
@@ -3571,7 +3572,7 @@ describe.each`
         "mediaTitle",
         "mediaID",
       ]);
-      expect(result4.total_count).toBe(2);
+      expect(result4.total_rows_count).toBe(BigInt(2));
       expect(result4.rows[0][convertReportedColumnName("type")]).toBe(1);
       expect(result4.rows[0][convertReportedColumnName("playlistID")]).toBe(
         gid

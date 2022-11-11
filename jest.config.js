@@ -6,5 +6,6 @@ module.exports = {
   testEnvironment: 'node',
   collectCoverage: false,
   testPathIgnorePatterns: ["<rootDir>/dist/", "<rootDir>/node_modules/"],
+  bail: true
 };
 
